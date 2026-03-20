@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Aplicação Flask
+  app:
+    build: .
+    container_name: pariscred-app
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: production
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_KEY: CONSIGNADO123
+      DATABASE_PATH: /app/app.db
+    volumes:
+      - ./app.db:/app/app.db
+      - ./backups:/app/backups
+    depends_on:
+      - evolution
+    networks:
+      - pariscred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Evolution API - WhatsApp
+  evolution:
+    image: atende-ai/evolution-api:1.0.0
+    container_name: evolution-api
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_URL: http://evolution:8080
+      DOMAIN_EXTERNAL_URL: http://localhost:8080
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution@postgres:5432/evolution
+      REDIS_URI: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - pariscred-network
+    restart: unless-stopped
+
+  # PostgreSQL para Evolution API
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution-postgres
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+      POSTGRES_DB: evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pariscred-network
+    restart: unless-stopped
+
+  # Redis para cache
+  redis:
+    image: redis:7-alpine
+    container_name: evolution-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pariscred-network
+    restart: unless-stopped
+
+  # Nginx - Reverse Proxy (opcional)
+  nginx:
+    image: nginx:latest
+    container_name: pariscred-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - pariscred-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  pariscred-network:
+    driver: bridge

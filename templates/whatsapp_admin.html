@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento WhatsApp - ParisCred Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-primary:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .instancias-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .instancia-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .instancia-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .instancia-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .status-desconectado {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status-conectando {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .status-conectado {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .instancia-info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .instancia-info p {
+            color: #666;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .instancia-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 8px 14px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-connect {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-connect:hover {
+            background: #5568d3;
+        }
+
+        .btn-disconnect {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-disconnect:hover {
+            background: #da190b;
+        }
+
+        .btn-qrcode {
+            background: #00bcd4;
+            color: white;
+        }
+
+        .btn-qrcode:hover {
+            background: #00acc1;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .qrcode-container {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .qrcode-container img {
+            max-width: 300px;
+            border-radius: 8px;
+            border: 3px solid #667eea;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.active {
+            display: block;
+        }
+
+        .alert-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+
+        .alert-error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+
+        .alert-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left: 4px solid #1565c0;
+        }
+
+        .breadcrumb {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .breadcrumb a {
+            color: white;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .menu-back {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .menu-back:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="breadcrumb">
+            <a href="/dashboard" class="menu-back">← Voltar ao Dashboard</a>
+        </div>
+
+        <div class="header">
+            <div>
+                <h1>📱 Gerenciamento WhatsApp</h1>
+                <p style="margin-top: 5px; opacity: 0.9;">Conecte seus números WhatsApp para disparar campanhas</p>
+            </div>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <div class="card">
+            <h2>Instâncias WhatsApp</h2>
+            <p style="color: #666; margin-bottom: 20px;">Gerenciar as 3 instâncias disponíveis para envio de mensagens</p>
+
+            <div class="instancias-grid" id="instancias-container">
+                <!-- Preenchido por JavaScript -->
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Conectar Nova Instância</h2>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: #f0f4ff; border-left: 4px solid #667eea; border-radius: 6px;">
+                <strong>💡 Dica:</strong> Escolha um método de conexão abaixo
+            </div>
+
+            <!-- Abas de método -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px;">
+                <button class="tab-method active" data-method="numero" onclick="mudarMetodo('numero')" style="padding: 10px 20px; background: none; border: none; font-weight: 600; cursor: pointer; color: #667eea; border-bottom: 3px solid #667eea;">
+                    📞 Por Número (RECOMENDADO)
+                </button>
+                <button class="tab-method" data-method="codigo" onclick="mudarMetodo('codigo')" style="padding: 10px 20px; background: none; border: none; font-weight: 600; cursor: pointer; color: #999;">
+                    🔐 Por Código
+                </button>
+            </div>
+
+            <!-- Método 1: Por Número -->
+            <div id="metodo-numero" class="metodo-section">
+                <form id="form-numero">
+                    <div class="form-group">
+                        <label for="instancia-num">Selecione a Instância:</label>
+                        <select id="instancia-num" name="instancia" required>
+                            <option value="">-- Selecione uma instância --</option>
+                            <option value="Paris_01">Paris_01</option>
+                            <option value="Chip01">Chip01</option>
+                            <option value="Chip02">Chip02</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="numero-direto">Número WhatsApp:</label>
+                        <input type="text" id="numero-direto" name="numero" placeholder="5548991234567" required>
+                        <small style="color: #999; margin-top: 5px; display: block;">Apenas números, com código do país (ex: 5548991234567)</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">✓ Conectar Número</button>
+                </form>
+            </div>
+
+            <!-- Método 3: Por Código -->
+            <div id="metodo-codigo" class="metodo-section" style="display: none;">
+                <form id="form-codigo">
+                    <div class="form-group">
+                        <label for="instancia-cod">Selecione a Instância:</label>
+                        <select id="instancia-cod" name="instancia" required>
+                            <option value="">-- Selecione uma instância --</option>
+                            <option value="Paris_01">Paris_01</option>
+                            <option value="Chip01">Chip01</option>
+                            <option value="Chip02">Chip02</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">📲 Gerar Código para Celular</button>
+                </form>
+                <p style="color: #666; margin-top: 15px; font-size: 13px;">
+                    ℹ️ Clique no botão acima para gerar um código único. Você receberá um código de 6 dígitos para digitar no seu celular.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div class="modal" id="modal-qrcode">
+        <div class="modal-content">
+            <button class="modal-close" onclick="fecharModal()">&times;</button>
+            <h3 style="margin-bottom: 20px; color: #667eea;">📲 Escanear QR Code</h3>
+            <div class="qrcode-container" id="qrcode-content">
+                <!-- Preenchido por JavaScript -->
+            </div>
+            <p style="margin-top: 20px; color: #666; text-align: center; font-size: 14px;">
+                Abra WhatsApp no seu telefone e escaneie este código para conectar a instância
+            </p>
+        </div>
+    </div>
+
+    <!-- Modal Confirmação de Número -->
+    <div class="modal" id="modal-confirmacao-numero">
+        <div class="modal-content" style="max-width: 600px;">
+            <button class="modal-close" onclick="fecharModalConfirmacao()">&times;</button>
+            <h2 style="margin-bottom: 30px; color: #667eea; text-align: center;">📱 Confirme no seu WhatsApp</h2>
+            
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 15px; text-align: center; margin-bottom: 30px; color: white;">
+                <p style="font-size: 14px; margin-bottom: 20px;">Você receberá uma notificação no WhatsApp em:</p>
+                <div id="numero-confirmacao" style="background: white; color: #667eea; padding: 15px 25px; border-radius: 10px; font-size: 24px; font-weight: bold; word-break: break-all;">
+                    +55 48 9912-3456
+                </div>
+            </div>
+
+            <div style="background: #f0f4ff; padding: 25px; border-radius: 10px; border-left: 4px solid #667eea; margin-bottom: 20px;">
+                <h4 style="color: #667eea; margin-bottom: 15px;">✓ O que fazer no seu celular:</h4>
+                <ol style="color: #333; margin-left: 20px; line-height: 1.8;">
+                    <li><strong>Abra WhatsApp</strong> no seu telefone</li>
+                    <li>Procure pela <strong>notificação de "Novo aparelho"</strong></li>
+                    <li>Ou vá em: <strong>Configurações → Aparelhos Vinculados</strong></li>
+                    <li>Clique em <strong>"CONFIRMAR"</strong> ou <strong>"ACEITAR"</strong></li>
+                    <li>Digite o código (se solicitado)</li>
+                    <li>Pronto! Aparelho conectado!</li>
+                </ol>
+            </div>
+
+            <div style="background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #ff9800; margin-bottom: 20px;">
+                <strong style="color: #e65100;">⏱️ Tempo limite: 2 minutos</strong>
+                <p style="color: #666; margin-top: 8px; font-size: 13px;">Confirme no celular dentro de 2 minutos.</p>
+            </div>
+
+            <div id="status-conexao" style="text-align: center; margin-bottom: 20px;">
+                <p style="color: #999;">Aguardando confirmação...</p>
+                <div style="margin-top: 15px;">
+                    <div style="width: 40px; height: 40px; border: 4px solid #f0f0f0; border-top: 4px solid #667eea; border-radius: 50%; margin: 0 auto; animation: spin 1s linear infinite;"></div>
+                </div>
+            </div>
+
+            <button onclick="fecharModalConfirmacao()" class="btn btn-secondary" style="width: 100%;">Ou Cancelar e Tentar Novamente</button>
+        </div>
+    </div>
+
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Modal Código -->
+    <div class="modal" id="modal-codigo">
+        <div class="modal-content" style="max-width: 600px;">
+            <button class="modal-close" onclick="fecharModalCodigo()">&times;</button>
+            <h2 style="margin-bottom: 30px; color: #667eea; text-align: center;">📱 Seu Código de Autenticação</h2>
+            
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 15px; text-align: center; margin-bottom: 20px;">
+                <p style="color: white; font-size: 14px; margin-bottom: 15px;">Copie este código e cole no WhatsApp:</p>
+                <div id="codigo-display" style="background: white; padding: 20px 30px; border-radius: 10px; font-size: 48px; font-weight: bold; color: #667eea; letter-spacing: 10px; font-family: 'Courier New', monospace; cursor: pointer; user-select: all;">
+                    ------
+                </div>
+                <p style="color: white; font-size: 12px; margin-top: 15px;">Clique no código para copiar</p>
+            </div>
+
+            <div style="background: #f0f4ff; padding: 20px; border-radius: 10px; border-left: 4px solid #667eea; margin-bottom: 20px;">
+                <h4 style="color: #667eea; margin-bottom: 10px;">📞 Como usar no WhatsApp:</h4>
+                <ol style="color: #333; margin-left: 20px;">
+                    <li>Abra WhatsApp no seu celular</li>
+                    <li>Vá em: <strong>Configurações → Aparelhos Vinculados → Vincular um aparelho</strong></li>
+                    <li>Você verá uma tela para "Escanear QR Code"</li>
+                    <li><strong>Em vez de escanear</strong>, procure por "Não consegue escanear?"</li>
+                    <li>Cole o código acima no campo que aparecer</li>
+                    <li>Pronto! Aparelho vinculado! ✓</li>
+                </ol>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button onclick="copiarCodigo()" class="btn btn-primary" style="flex: 1;">📋 Copiar Código</button>
+                <button onclick="fecharModalCodigo()" class="btn btn-secondary" style="flex: 1;">✓ Concluído</button>
+            </div>
+
+            <p style="color: #999; margin-top: 20px; font-size: 12px; text-align: center;">
+                ⏱️ Código válido por 2 minutos. Se expirar, gere um novo.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let metodoAtual = 'qrcode';
+
+        // Carregar instâncias ao abrir a página
+        carregarInstancias();
+
+        // Form de QR Code
+        document.getElementById('form-qrcode').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const instancia = document.getElementById('instancia-qr').value;
+            if (!instancia) {
+                mostrarAlerta('Selecione uma instância', 'error');
+                return;
+            }
+            await obterQRCode(instancia);
+        });
+
+        // Form de Número Direto
+        document.getElementById('form-numero').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const instancia = document.getElementById('instancia-num').value;
+            const numero = document.getElementById('numero-direto').value;
+
+            if (!instancia || !numero) {
+                mostrarAlerta('Preencha todos os campos', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/whatsapp/conectar-numero`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instancia_nome: instancia,
+                        numero: numero,
+                        metodo: 'numero'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Mostrar modal aguardando confirmação
+                    document.getElementById('numero-confirmacao').textContent = '+' + data.numero.replace(/^(\d{2})(\d{2})(\d{4})(\d{4})$/, '$1 $2 $3-$4');
+                    document.getElementById('modal-confirmacao-numero').classList.add('active');
+                    
+                    // Fazer polling para verificar confirmação
+                    let tentativas = 0;
+                    const intervalo = setInterval(async () => {
+                        tentativas++;
+                        
+                        try {
+                            const statusResponse = await fetch(`${API_URL}/whatsapp/status-conexao/${data.numero}`);
+                            const statusData = await statusResponse.json();
+                            
+                            if (statusData.confirmado) {
+                                clearInterval(intervalo);
+                                mostrarAlerta('✓ Confirmado! Instância conectada com sucesso!', 'success');
+                                document.getElementById('modal-confirmacao-numero').classList.remove('active');
+                                document.getElementById('form-numero').reset();
+                                setTimeout(carregarInstancias, 2000);
+                            }
+                        } catch (err) {
+                            // Erro ao verificar status, continue tentando
+                        }
+                        
+                        // Parar após 2 minutos
+                        if (tentativas > 24) { // 24 x 5 segundos = 120 segundos
+                            clearInterval(intervalo);
+                            mostrarAlerta('⏱️ Tempo expirou. Tente novamente.', 'error');
+                            document.getElementById('modal-confirmacao-numero').classList.remove('active');
+                        }
+                    }, 5000); // Verificar a cada 5 segundos
+                    
+                    document.getElementById('form-numero').reset();
+                } else {
+                    mostrarAlerta('✗ Erro: ' + (data.erro || 'Erro desconhecido'), 'error');
+                }
+            } catch (err) {
+                mostrarAlerta('✗ Erro: ' + err.message, 'error');
+            }
+        });
+
+        // Form de Código
+        document.getElementById('form-codigo').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const instancia = document.getElementById('instancia-cod').value;
+
+            if (!instancia) {
+                mostrarAlerta('Selecione uma instância', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/whatsapp/gerar-codigo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instancia_nome: instancia
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('codigo-display').textContent = data.codigo;
+                    document.getElementById('modal-codigo').classList.add('active');
+                } else {
+                    mostrarAlerta('✗ Erro: ' + (data.erro || 'Erro ao gerar código'), 'error');
+                }
+            } catch (err) {
+                mostrarAlerta('✗ Erro: ' + err.message, 'error');
+            }
+        });
+
+        function mudarMetodo(metodo) {
+            metodoAtual = metodo;
+
+            // Ocultar todos
+            document.getElementById('metodo-qrcode').style.display = 'none';
+            document.getElementById('metodo-numero').style.display = 'none';
+            document.getElementById('metodo-codigo').style.display = 'none';
+
+            // Mostrar selecionado
+            document.getElementById('metodo-' + metodo).style.display = 'block';
+
+            // Atualizar abas
+            document.querySelectorAll('.tab-method').forEach(btn => {
+                if (btn.dataset.method === metodo) {
+                    btn.style.color = '#667eea';
+                    btn.style.borderBottom = '3px solid #667eea';
+                } else {
+                    btn.style.color = '#999';
+                    btn.style.borderBottom = '3px solid transparent';
+                }
+            });
+        }
+
+        async function carregarInstancias() {
+            try {
+                const response = await fetch(`${API_URL}/whatsapp/instancias`);
+                const data = await response.json();
+                
+                // Debug: garantir que é array
+                const instancias = Array.isArray(data) ? data : [];
+                
+                if (instancias.length === 0) {
+                    console.warn('⚠️  Nenhuma instância retornada');
+                }
+
+                let html = '';
+                instancias.forEach(inst => {
+                    const statusClass = `status-${inst.status}`;
+                    const statusText = inst.status.charAt(0).toUpperCase() + inst.status.slice(1);
+
+                    html += `
+                        <div class="instancia-card">
+                            <h3>${inst.nome}</h3>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+
+                            <div class="instancia-info">
+                                <p><strong>Número:</strong> ${inst.numero || '(não conectado)'}</p>
+                                <p><strong>Respondendo:</strong> ${inst.respondendo ? 'Sim' : 'Não'}</p>
+                                ${inst.conectado_em ? `<p><strong>Desde:</strong> ${new Date(inst.conectado_em).toLocaleString('pt-BR')}</p>` : ''}
+                            </div>
+
+                            <div class="instancia-actions">
+                                <button class="btn-small btn-qrcode" onclick="obterQRCode('${inst.nome}')">QR Code</button>
+                                ${inst.status !== 'desconectado' ? `
+                                    <button class="btn-small btn-disconnect" onclick="desconectar('${inst.nome}')">Desconectar</button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('instancias-container').innerHTML = html;
+            } catch (err) {
+                mostrarAlerta('✗ Erro ao carregar instâncias: ' + err.message, 'error');
+            }
+        }
+
+        async function obterQRCode(instancia) {
+            try {
+                const response = await fetch(`${API_URL}/whatsapp/qrcode/${instancia}`);
+                const data = await response.json();
+
+                document.getElementById('qrcode-content').innerHTML = `
+                    <img src="${data.qrcode}" alt="QR Code">
+                    <p style="margin-top: 15px; color: #666;"><strong>Instância:</strong> ${data.instancia}</p>
+                `;
+
+                document.getElementById('modal-qrcode').classList.add('active');
+            } catch (err) {
+                mostrarAlerta('✗ Erro ao obter QR Code: ' + err.message, 'error');
+            }
+        }
+
+        async function desconectar(instancia) {
+            if (!confirm(`Desconectar ${instancia}?`)) return;
+
+            try {
+                const response = await fetch(`${API_URL}/whatsapp/desconectar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ instancia_nome: instancia })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    mostrarAlerta('✓ Instância desconectada', 'success');
+                    carregarInstancias();
+                } else {
+                    mostrarAlerta('✗ Erro: ' + data.erro, 'error');
+                }
+            } catch (err) {
+                mostrarAlerta('✗ Erro ao desconectar: ' + err.message, 'error');
+            }
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-qrcode').classList.remove('active');
+        }
+
+        function fecharModalCodigo() {
+            document.getElementById('modal-codigo').classList.remove('active');
+        }
+
+        function fecharModalConfirmacao() {
+            document.getElementById('modal-confirmacao-numero').classList.remove('active');
+        }
+
+        function copiarCodigo() {
+            const codigo = document.getElementById('codigo-display').textContent;
+            navigator.clipboard.writeText(codigo).then(() => {
+                mostrarAlerta('✓ Código copiado! Cole no WhatsApp', 'success');
+            }).catch(() => {
+                // Fallback para navegadores antigos
+                const textarea = document.createElement('textarea');
+                textarea.value = codigo;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                mostrarAlerta('✓ Código copiado! Cole no WhatsApp', 'success');
+            });
+        }
+
+        function mostrarAlerta(mensagem, tipo) {
+            const alert = document.getElementById('alert');
+            alert.className = `alert ${tipo === 'success' ? 'alert-success' : tipo === 'error' ? 'alert-error' : 'alert-info'} active`;
+            alert.textContent = mensagem;
+
+            setTimeout(() => {
+                alert.classList.remove('active');
+            }, 5000);
+        }
+
+        // Fechar modal ao clicar fora
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('modal-qrcode');
+            const modalCodigo = document.getElementById('modal-codigo');
+            
+            if (e.target === modal) {
+                fecharModal();
+            }
+            if (e.target === modalCodigo) {
+                fecharModalCodigo();
+            }
+        });
+
+        // Copiar código ao clicar nele
+        document.getElementById('codigo-display').addEventListener('click', copiarCodigo);
+
+        // Auto-refresh a cada 10 segundos
+        setInterval(carregarInstancias, 10000);
+    </script>
+</body>
+</html>

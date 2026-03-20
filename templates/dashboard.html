@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ParisCred Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+        
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            overflow-y: auto;
+        }
+        
+        .sidebar-logo {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        
+        .nav-group {
+            margin-bottom: 30px;
+        }
+        
+        .nav-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            opacity: 0.7;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+        
+        .nav-item {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: block;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.3);
+            font-weight: 600;
+        }
+        
+        .user-section {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding-top: 20px;
+            margin-top: 30px;
+        }
+        
+        .user-info {
+            margin-bottom: 15px;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .user-role {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 3px;
+        }
+        
+        .logout-btn {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .main {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            color: #333;
+        }
+        
+        .header-subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .btn-novo {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-novo:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #667eea;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .campanhas-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .campanhas-section h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #333;
+        }
+        
+        .campanhas-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .campanha-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .campanha-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .campanha-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+        
+        .campanha-nome {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .campanha-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-rascunho {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-ativo {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-disparado {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .campanha-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .campanha-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-small:hover {
+            background: #f5f5f5;
+        }
+        
+        .btn-disparar {
+            background: #28a745;
+            color: white;
+            border: none;
+        }
+        
+        .btn-disparar:hover {
+            background: #218838;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-logo">🚀</div>
+            <div class="sidebar-title">ParisCred Intelligence</div>
+            
+            <div class="nav-group">
+                <div class="nav-title">Menu</div>
+                <a href="/dashboard" class="nav-item active">📊 Dashboard</a>
+                <a href="/campanhas" class="nav-item">📧 Campanhas</a>
+            </div>
+            
+            <div class="nav-group" id="admin-menu" style="display:none;">
+                <div class="nav-title">Administração</div>
+                <a href="/admin" class="nav-item">⚙️ Painel ADM</a>
+                <a href="/admin/whatsapp" class="nav-item">📱 Gerenciar WhatsApp</a>
+            </div>
+
+            <div class="nav-group" id="vendedor-menu">
+                <div class="nav-title">Atendimento</div>
+                <a href="/vendedor/atendimento" class="nav-item">📞 Central de Atendimento</a>
+            </div>
+            
+            <div class="user-section">
+                <div class="user-info">
+                    <div class="user-name" id="user-name">Carregando...</div>
+                    <div class="user-role" id="user-role">Loading...</div>
+                </div>
+                <button class="logout-btn" onclick="logout()">🚪 Sair</button>
+            </div>
+        </div>
+        
+        <div class="main">
+            <div class="header">
+                <div>
+                    <h1>Dashboard</h1>
+                    <div class="header-subtitle" id="welcome-text">Bem-vindo ao sistema</div>
+                </div>
+            </div>
+            
+            <div class="stats" id="stats-container">
+                <div class="stat-card">
+                    <div class="stat-label">📧 Campanhas</div>
+                    <div class="stat-value" id="stat-campanhas">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">📤 Disparos Realizados</div>
+                    <div class="stat-value" id="stat-disparos">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">👥 Status</div>
+                    <div class="stat-value" id="stat-status">✓ Online</div>
+                </div>
+            </div>
+            
+            <div class="campanhas-section">
+                <h2>Minhas Campanhas</h2>
+                <div class="campanhas-list" id="campanhas-list">
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <p>Nenhuma campanha criada ainda</p>
+                        <p style="font-size: 12px; margin-top: 10px;">
+                            <a href="/campanhas" style="color: #667eea;">Criar primeira campanha →</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Carrega dados do usuário
+        fetch('/api/usuario')
+            .then(r => r.json())
+            .then(user => {
+                document.getElementById('user-name').textContent = user.nome;
+                document.getElementById('user-role').textContent = user.role === 'admin' ? '👑 Administrador' : '📱 Vendedor';
+                document.getElementById('welcome-text').textContent = `Bem-vindo, ${user.nome}!`;
+                
+                // Se for admin, mostra menu de administração
+                if (user.role === 'admin') {
+                    document.getElementById('admin-menu').style.display = 'block';
+                    // Admin pode ver ambos os menus
+                }
+                
+                // Todos os usuários (admin e vendedor) veem o menu de atendimento
+                // Pode opcionalmente ocultar para admin se preferir
+            });
+        
+        // Carrega estatísticas
+        fetch('/api/stats')
+            .then(r => r.json())
+            .then(stats => {
+                document.getElementById('stat-campanhas').textContent = stats.total_campanhas || 0;
+                document.getElementById('stat-disparos').textContent = stats.total_disparos || 0;
+            });
+        
+        // Carrega campanhas
+        fetch('/api/campanhas')
+            .then(r => r.json())
+            .then(campanhas => {
+                const container = document.getElementById('campanhas-list');
+                
+                if (campanhas.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <p>Nenhuma campanha criada ainda</p>
+                            <p style="font-size: 12px; margin-top: 10px;">
+                                <a href="/campanhas" style="color: #667eea;">Criar primeira campanha →</a>
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = campanhas.map(camp => `
+                    <div class="campanha-card" onclick="window.location='/campanhas#${camp.id}'">
+                        <div class="campanha-header">
+                            <div class="campanha-nome">${camp.nome}</div>
+                            <div class="campanha-status status-${camp.status}">${camp.status}</div>
+                        </div>
+                        <div class="campanha-info">
+                            <span>👥 ${camp.beneficiarios.length} beneficiários</span>
+                            <span>📤 ${camp.total_enviados} enviados</span>
+                            <span>📅 ${new Date(camp.criado_em).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                        <div class="campanha-actions">
+                            <button class="btn-small" onclick="event.stopPropagation(); editarCampanha('${camp.id}')">✏️ Editar</button>
+                            ${camp.status === 'rascunho' ? `<button class="btn-small btn-disparar" onclick="event.stopPropagation(); dispararCampanha('${camp.id}')">⚡ Disparar</button>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            });
+        
+        function logout() {
+            window.location = '/logout';
+        }
+        
+        function editarCampanha(id) {
+            alert('Editar campanha: ' + id);
+        }
+        
+        function dispararCampanha(id) {
+            if (confirm('Disparar esta campanha agora?')) {
+                fetch(`/api/campanhas/${id}/disparar`, { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        alert(data.mensagem || data.erro);
+                        location.reload();
+                    });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Disparador ParisCred</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .beneficiarios {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .beneficiario {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .beneficiario:last-child {
+            margin-bottom: 0;
+        }
+        
+        .beneficiario-info {
+            flex: 1;
+        }
+        
+        .beneficiario-nome {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 3px;
+        }
+        
+        .beneficiario-numero {
+            font-size: 12px;
+            color: #999;
+            font-family: monospace;
+        }
+        
+        .beneficiario-status {
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #e8f4f8;
+            color: #0066cc;
+        }
+        
+        .config {
+            background: #f0f4ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #dde5ff;
+        }
+        
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #dde5ff;
+        }
+        
+        .config-item:last-child {
+            border-bottom: none;
+        }
+        
+        .config-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .config-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            grid-column: 1 / -1;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .status {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 100px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .status-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-messages {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #666;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .status-message {
+            padding: 5px 0;
+            word-break: break-all;
+        }
+        
+        .status-message.success {
+            color: #28a745;
+        }
+        
+        .status-message.error {
+            color: #dc3545;
+        }
+        
+        .status-message.info {
+            color: #0066cc;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .footer {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Disparador ParisCred</h1>
+            <p>Sistema de Disparo de Mensagens WhatsApp</p>
+        </div>
+        
+        <div class="beneficiarios">
+            <h3 style="margin-bottom: 15px; color: #333; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Beneficiários</h3>
+            
+            <div class="beneficiario">
+                <div class="beneficiario-info">
+                    <div class="beneficiario-nome">💳 Kleiton</div>
+                    <div class="beneficiario-numero">5548991105801</div>
+                </div>
+                <div class="beneficiario-status">Pronto</div>
+            </div>
+            
+            <div class="beneficiario">
+                <div class="beneficiario-info">
+                    <div class="beneficiario-nome">💳 Kleber Mohr</div>
+                    <div class="beneficiario-numero">5548996057792</div>
+                </div>
+                <div class="beneficiario-status">Pronto</div>
+            </div>
+        </div>
+        
+        <div class="config">
+            <div class="config-item">
+                <span class="config-label">📱 Instância Ativa</span>
+                <span class="config-value">Paris_01</span>
+            </div>
+            <div class="config-item">
+                <span class="config-label">⏱️ Delay Entre Envios</span>
+                <span class="config-value">5s (teste)</span>
+            </div>
+            <div class="config-item">
+                <span class="config-label">📊 API</span>
+                <span class="config-value">Local Server</span>
+            </div>
+            <div class="config-item">
+                <span class="config-label">🔑 Status Auth</span>
+                <span class="config-value" id="auth-status">Verificando...</span>
+            </div>
+        </div>
+        
+        <div class="status">
+            <div class="status-title">📋 Log de Operações</div>
+            <div class="status-messages" id="status-messages">
+                <div class="status-message info">Iniciando sistema...</div>
+            </div>
+        </div>
+        
+        <div class="buttons">
+            <button class="btn-secondary" onclick="testarAPI()">🧪 Testar API</button>
+            <button class="btn-secondary" onclick="limparLog()">🗑️ Limpar Log</button>
+            <button class="btn-primary" id="btn-disparar" onclick="dispararMensagens()">
+                ⚡ DISPARAR AGORA
+            </button>
+        </div>
+        
+        <div class="footer">
+            <p>✓ Sistema Pronto | API Online | Campanha Configurada</p>
+        </div>
+    </div>
+
+    <script>
+        function adicionarLog(mensagem, tipo = 'info') {
+            const log = document.getElementById('status-messages');
+            const div = document.createElement('div');
+            div.className = `status-message ${tipo}`;
+            
+            const timestamp = new Date().toLocaleTimeString('pt-BR');
+            div.textContent = `[${timestamp}] ${mensagem}`;
+            
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function limparLog() {
+            document.getElementById('status-messages').innerHTML = '';
+            adicionarLog('Log limpo');
+        }
+        
+        async function testarAPI() {
+            adicionarLog('🔍 Testando servidor local...', 'info');
+            
+            try {
+                const response = await fetch('/api/status');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarLog(`✓ Servidor Online | Evolution ${data.api_version}`, 'success');
+                    document.getElementById('auth-status').textContent = '✓ Conectado';
+                    document.getElementById('auth-status').style.color = '#28a745';
+                } else {
+                    adicionarLog('✗ Servidor offline', 'error');
+                }
+            } catch (error) {
+                adicionarLog(`✗ Erro: ${error.message}`, 'error');
+            }
+        }
+        
+        async function dispararMensagens() {
+            const btn = document.getElementById('btn-disparar');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Disparando...';
+            
+            try {
+                const response = await fetch('/api/disparar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        for (const resultado of data.resultados) {
+                            adicionarLog(`✓ ${resultado.nome} - ${resultado.status}`, 'success');
+                        }
+                    }
+                } else {
+                    adicionarLog('✗ Erro ao disparar', 'error');
+                }
+                
+            } catch (error) {
+                adicionarLog(`✗ Erro: ${error.message}`, 'error');
+            }
+            
+            btn.disabled = false;
+            btn.innerHTML = '⚡ DISPARAR AGORA';
+        }
+        
+        // Testar servidor ao carregar página
+        window.addEventListener('load', () => {
+            testarAPI();
+        });
+    </script>
+</body>
+</html>

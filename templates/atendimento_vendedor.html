@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central de Atendimento - ParisCred Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .sidebar-header h2 {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+
+        .sidebar-header p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .leads-tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .leads-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .lead-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .lead-item:hover {
+            background: #f9fafc;
+        }
+
+        .lead-item.active {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+        }
+
+        .lead-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .lead-preview {
+            font-size: 12px;
+            color: #999;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .lead-time {
+            font-size: 11px;
+            color: #ccc;
+            margin-top: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        .badge-alta {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge-media {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #f5f7fa;
+        }
+
+        .chat-header {
+            background: white;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h3 {
+            font-size: 18px;
+            color: #333;
+        }
+
+        .lead-info {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .message.entrada {
+            justify-content: flex-start;
+        }
+
+        .message.saida {
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 60%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+        }
+
+        .message.entrada .message-bubble {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .message.saida .message-bubble {
+            background: #667eea;
+            color: white;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            flex-direction: column;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        .chat-input-area {
+            background: white;
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area textarea {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .chat-input-area textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-send {
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            align-self: flex-end;
+        }
+
+        .btn-send:hover {
+            background: #5568d3;
+        }
+
+        .btn-send:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .menu-back {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .menu-back:hover {
+            background: #5568d3;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-action {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-marcar-atendido {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-marcar-atendido:hover {
+            background: #45a049;
+        }
+
+        .status-pendente {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status-atendido {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .leads-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: #999;
+        }
+
+        .leads-counter {
+            font-size: 12px;
+            color: #999;
+            padding: 10px 15px;
+            border-top: 1px solid #f0f0f0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: 30%;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .main-content {
+                height: 70%;
+            }
+
+            .message-bubble {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar - Lista de Leads -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📞 Central de Atendimento</h2>
+                <p>Seus leads qualificados</p>
+            </div>
+
+            <div class="leads-tabs">
+                <button class="tab-btn active" onclick="filtrarLeads('pendentes')">📋 Pendentes</button>
+                <button class="tab-btn" onclick="filtrarLeads('atendidos')">✓ Atendidos</button>
+            </div>
+
+            <div class="leads-list" id="leads-list">
+                <!-- Preenchido por JavaScript -->
+            </div>
+
+            <div class="leads-counter" id="leads-counter">
+                Carregando...
+            </div>
+        </div>
+
+        <!-- Main Content - Chat -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div>
+                    <a href="/dashboard" class="menu-back">← Voltar ao Dashboard</a>
+                </div>
+                <div id="lead-header" style="text-align: right;">
+                    <p style="color: #999; font-size: 14px;">Selecione um lead para começar</p>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <p>Selecione um lead para visualizar a conversa</p>
+                </div>
+            </div>
+
+            <div class="chat-input-area" id="chat-input-area" style="display: none;">
+                <textarea id="message-input" placeholder="Digite sua resposta..." rows="3"></textarea>
+                <button class="btn-send" onclick="enviarMensagem()">📤 Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let leadSelecionado = null;
+        let filtroAtual = 'pendentes';
+        const API_URL = '/api';
+
+        // Carregar leads ao abrir
+        carregarLeads();
+
+        async function carregarLeads() {
+            try {
+                const response = await fetch(`${API_URL}/leads/pendentes`);
+                const leads = await response.json();
+
+                const leadsPendentes = leads.filter(l => l.status === 'pendente');
+                const leadsAtendidos = leads.filter(l => l.status === 'atendido');
+
+                renderizarLeads(leadsPendentes);
+                atualizarContador(leadsPendentes.length);
+            } catch (err) {
+                console.error('Erro ao carregar leads:', err);
+            }
+        }
+
+        function renderizarLeads(leads) {
+            const lista = document.getElementById('leads-list');
+
+            if (leads.length === 0) {
+                lista.innerHTML = '<div class="leads-empty">Nenhum lead disponível</div>';
+                return;
+            }
+
+            let html = '';
+            leads.forEach(lead => {
+                const classAtivo = leadSelecionado?.id === lead.id ? 'active' : '';
+                const badge = `<span class="badge badge-${lead.qualificacao}">${lead.qualificacao.toUpperCase()}</span>`;
+
+                html += `
+                    <div class="lead-item ${classAtivo}" onclick="selecionarLead(${JSON.stringify(lead).replace(/"/g, '&quot;')})">
+                        <div class="lead-name">${lead.nome}</div>
+                        <div class="lead-preview">${lead.mensagem}</div>
+                        <div class="lead-time">${new Date(lead.timestamp).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</div>
+                        ${badge}
+                    </div>
+                `;
+            });
+
+            lista.innerHTML = html;
+        }
+
+        async function selecionarLead(lead) {
+            leadSelecionado = lead;
+
+            // Atualizar header
+            document.getElementById('lead-header').innerHTML = `
+                <h3>${lead.nome}</h3>
+                <div class="lead-info">
+                    <span>📱 ${lead.numero}</span>
+                    <span>🎯 Qualificação: ${lead.qualificacao}</span>
+                </div>
+            `;
+
+            // Carregar conversa
+            await carregarConversa(lead.id);
+
+            // Mostrar input de mensagem
+            document.getElementById('chat-input-area').style.display = 'flex';
+
+            // Renderizar leads de novo para destacar selecionado
+            carregarLeads();
+        }
+
+        async function carregarConversa(leadId) {
+            try {
+                const response = await fetch(`${API_URL}/leads/${leadId}/conversa`);
+                const data = await response.json();
+
+                const conversas = data.conversa || [];
+                const chat = document.getElementById('chat-messages');
+
+                if (conversas.length === 0) {
+                    chat.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💬</div>
+                            <p>Nenhuma mensagem anterior</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                conversas.forEach(msg => {
+                    const hora = new Date(msg.timestamp).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+                    html += `
+                        <div class="message ${msg.direção}">
+                            <div>
+                                <div class="message-bubble">${msg.mensagem}</div>
+                                <div class="message-time">${hora}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                chat.innerHTML = html;
+                chat.scrollTop = chat.scrollHeight;
+            } catch (err) {
+                console.error('Erro ao carregar conversa:', err);
+            }
+        }
+
+        async function enviarMensagem() {
+            if (!leadSelecionado) return;
+
+            const textarea = document.getElementById('message-input');
+            const mensagem = textarea.value.trim();
+
+            if (!mensagem) return;
+
+            try {
+                const response = await fetch(`${API_URL}/leads/${leadSelecionado.id}/responder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensagem })
+                });
+
+                if (response.ok) {
+                    textarea.value = '';
+                    await carregarConversa(leadSelecionado.id);
+
+                    // Marcar como atendido se ainda estiver pendente
+                    if (leadSelecionado.status === 'pendente') {
+                        await fetch(`${API_URL}/leads/${leadSelecionado.id}/atender`, { method: 'POST' });
+                        carregarLeads();
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao enviar mensagem:', err);
+            }
+        }
+
+        function filtrarLeads(filtro) {
+            filtroAtual = filtro;
+
+            // Atualizar botões de aba
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Atualizar lista (assim que remover, vai carregar pendentes)
+            carregarLeads();
+        }
+
+        function atualizarContador(total) {
+            document.getElementById('leads-counter').textContent = `${total} lead${total !== 1 ? 's' : ''} pendente${total !== 1 ? 's' : ''}`;
+        }
+
+        // Auto-refresh a cada 30 segundos
+        setInterval(carregarLeads, 30000);
+
+        // Permitir Enter para enviar
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                enviarMensagem();
+            }
+        });
+    </script>
+</body>
+</html>
