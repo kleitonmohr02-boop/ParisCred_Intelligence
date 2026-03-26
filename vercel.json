@@ -1,0 +1,22 @@
+{
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "vercel-python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "main.py"
+    }
+  ],
+  "env": {
+    "SECRET_KEY": "@secret_key",
+    "DATABASE_PATH": "/tmp/pariscred.db",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "EVOLUTION_API_URL": "https://your-evolution-api.com",
+    "EVOLUTION_API_KEY": "@evolution_api_key",
+    "EVOLUTION_INSTANCE_NAME": "Paris_01"
+  }
+}
