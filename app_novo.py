@@ -1,14 +1,19 @@
 """
 ParisCred Intelligence - Sistema SaaS com SQLite
-Aplicação Full-Stack com Autenticação, Painel ADM e Gerenciamento (Banco de Dados)
+Aplicação Full-Stack com Autenticação, Painel ADM e Gerenciamento
+Versão 2.0 - Com segurança, validação e Evolution API integrada
 """
 
+import os
+import logging
+from logging.handlers import RotatingFileHandler
+from functools import wraps
+
+import requests
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
-from functools import wraps
 from datetime import datetime
 import secrets
-import os
 
 # Importar funções do database
 from database import (
@@ -16,6 +21,16 @@ from database import (
     UsuariosDB,
     CampanhasDB,
     HistoricoDB
+)
+
+# Importar validadores
+from validators import (
+    UsuarioLogin,
+    UsuarioCreate,
+    CampanhaCreate,
+    UsuarioUpdate,
+    Beneficiario,
+    Botao
 )
 
 # Importar skills e rotas customizadas
@@ -32,11 +47,38 @@ except ImportError:
 # CONFIGURAÇÃO INICIAL
 # ============================================================
 
-app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
-CORS(app)
+# Carregar variáveis de ambiente
+from dotenv import load_dotenv
+load_dotenv()
 
-# Inicializar banco de dados na primeira execução
+app = Flask(__name__)
+
+# Security: Secret key do .env ou gerar uma nova
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
+
+# Security: Configuração de CORS específica
+ALLOWED_ORIGINS = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://localhost:3000').split(',')
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+
+# Logging estruturado
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_FILE = os.getenv('LOG_FILE', 'logs/pariscred.log')
+
+# Criar diretório de logs se não existir
+os.makedirs('logs', exist_ok=True)
+
+# Configurar logging
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Inicializar banco de dados
 db = Database("app.db")
 
 # Registrar rotas de skills (se disponíveis)
@@ -45,7 +87,21 @@ if SKILLS_ENABLED:
         from skills_routes import registrar_rotas_skills
         registrar_rotas_skills(app)
     except ImportError:
-        pass  # Skills routes não disponíveis ainda
+        pass
+
+# Registrar rotas de importação de beneficiários
+try:
+    from modulo_importacao import criar_rotas_importacao
+    criar_rotas_importacao(app)
+except ImportError as e:
+    logger.warning(f"Módulo importação não disponível: {e}")
+
+# Registrar rotas anti-ban
+try:
+    from modulo_antiban import criar_rotas_antiban
+    criar_rotas_antiban(app)
+except ImportError as e:
+    logger.warning(f"Módulo anti-ban não disponível: {e}")
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -70,6 +126,7 @@ def requer_admin(f):
         
         usuario = UsuariosDB.obter(session['usuario'])
         if not usuario or usuario['role'] != 'admin':
+            logger.warning(f"Acesso negado para {session['usuario']} em {request.path}")
             return jsonify({'erro': 'Acesso negado'}), 403
         
         return f(*args, **kwargs)
@@ -118,6 +175,79 @@ def campanha_para_json(campanha):
     }
 
 
+def enviar_whatsapp_evolution(numero, mensagem, botoes=None, instance_name=None):
+    """
+    Envia mensagem via Evolution API
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
+    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
+    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01')
+    
+    url = f"{api_url}/message/sendText/{instance}"
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'apikey': api_key
+    }
+    
+    payload = {
+        'number': numero,
+        'text': mensagem
+    }
+    
+    if botoes:
+        payload['buttons'] = [
+            {'id': b['id'], 'text': b['text']} for b in botoes
+        ]
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            logger.info(f"Mensagem enviada para {numero}")
+            return {'status': 'enviado', 'response': response.json()}
+        else:
+            logger.error(f"Erro ao enviar para {numero}: {response.text}")
+            return {'status': 'erro', 'message': response.text}
+            
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout ao enviar para {numero}")
+        return {'status': 'timeout', 'message': 'Tempo limite excedido'}
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem: {str(e)}")
+        return {'status': 'erro', 'message': str(e)}
+
+
+def checar_instancia_evolution(instance_name=None):
+    """
+    Verifica status da instância WhatsApp
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
+    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
+    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01')
+    
+    url = f"{api_url}/instance/connectionState/{instance}"
+    
+    headers = {'apikey': api_key}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'status': 'ok',
+                'instance': instance,
+                'state': data.get('instance', {}).get('state', 'unknown')
+            }
+        else:
+            return {'status': 'erro', 'message': response.text}
+            
+    except Exception as e:
+        logger.error(f"Erro ao verificar instância: {str(e)}")
+        return {'status': 'erro', 'message': str(e)}
+
+
 # ============================================================
 # ROTAS PÚBLICAS (Auth)
 # ============================================================
@@ -134,17 +264,27 @@ def index():
 def login():
     """Página de login"""
     if request.method == 'POST':
-        email = request.form.get('email', '').lower()
-        senha = request.form.get('senha', '')
+        try:
+            # Validar input
+            data = UsuarioLogin(
+                email=request.form.get('email', ''),
+                senha=request.form.get('senha', '')
+            )
+            
+            # Verificar credenciais
+            if UsuariosDB.verificar_senha(data.email, data.senha):
+                usuario = UsuariosDB.obter(data.email)
+                if usuario and usuario['ativo']:
+                    session['usuario'] = data.email
+                    logger.info(f"Login bem-sucedido: {data.email}")
+                    return redirect(url_for('dashboard'))
+            
+            logger.warning(f"Login falhou para: {data.email}")
+            return render_template('login.html', erro='Email ou senha incorretos')
         
-        # Verificar credenciais
-        if UsuariosDB.verificar_senha(email, senha):
-            usuario = UsuariosDB.obter(email)
-            if usuario and usuario['ativo']:
-                session['usuario'] = email
-                return redirect(url_for('dashboard'))
-        
-        return render_template('login.html', erro='Email ou senha incorretos')
+        except Exception as e:
+            logger.error(f"Erro no login: {str(e)}")
+            return render_template('login.html', erro='Erro ao processar login')
     
     return render_template('login.html')
 
@@ -152,7 +292,9 @@ def login():
 @app.route('/logout')
 def logout():
     """Faz logout do usuário"""
+    email = session.get('usuario', 'desconhecido')
     session.clear()
+    logger.info(f"Logout: {email}")
     return redirect(url_for('login'))
 
 
@@ -165,6 +307,7 @@ def logout():
 def dashboard():
     """Dashboard principal do usuário"""
     usuario = obter_usuario_atual()
+    logger.info(f"Acesso dashboard: {usuario['email']}")
     return render_template('dashboard.html', usuario=usuario_para_json(usuario))
 
 
@@ -183,7 +326,6 @@ def api_stats():
     usuario = obter_usuario_atual()
     
     if usuario['role'] == 'admin':
-        # Estatísticas ADM
         usuarios = UsuariosDB.listar_todos()
         campanhas = CampanhasDB.listar_todas()
         
@@ -195,7 +337,6 @@ def api_stats():
             'campanhas_ativas': sum(1 for c in campanhas if c['status'] == 'disparado')
         })
     else:
-        # Estatísticas do vendedor
         campanhas_users = CampanhasDB.listar_por_criador(session['usuario'])
         return jsonify({
             'total_campanhas': len(campanhas_users),
@@ -232,28 +373,43 @@ def api_campanhas():
         return jsonify([campanha_para_json(c) for c in lista])
     
     elif request.method == 'POST':
-        # Criar nova campanha
-        data = request.json
-        
-        campanha_id = CampanhasDB.criar(
-            nome=data.get('nome', 'Nova Campanha'),
-            descricao=data.get('descricao', ''),
-            criador=session['usuario'],
-            mensagem=data.get('mensagem', ''),
-            beneficiarios=data.get('beneficiarios', []),
-            botoes=data.get('botoes', []),
-            instancias=data.get('instancias', ['Paris_01'])
-        )
-        
-        if campanha_id:
-            nova_campanha = CampanhasDB.obter(campanha_id)
-            return jsonify({
-                'sucesso': True,
-                'mensagem': f'Campanha "{nova_campanha["nome"]}" criada com sucesso!',
-                'campanha': campanha_para_json(nova_campanha)
-            }), 201
-        else:
-            return jsonify({'erro': 'Erro ao criar campanha'}), 500
+        try:
+            # Validar input
+            data = request.json
+            campanha_validada = CampanhaCreate(
+                nome=data.get('nome', 'Nova Campanha'),
+                descricao=data.get('descricao', ''),
+                mensagem=data.get('mensagem', ''),
+                beneficiarios=data.get('beneficiarios', []),
+                botoes=data.get('botoes', []),
+                instancias=data.get('instancias', ['Paris_01'])
+            )
+            
+            # Criar nova campanha
+            campanha_id = CampanhasDB.criar(
+                nome=campanha_validada.nome,
+                descricao=campanha_validada.descricao,
+                criador=session['usuario'],
+                mensagem=campanha_validada.mensagem,
+                beneficiarios=[b.dict() for b in campanha_validada.beneficiarios],
+                botoes=[b.dict() for b in campanha_validada.botoes],
+                instancias=campanha_validada.instancias
+            )
+            
+            if campanha_id:
+                nova_campanha = CampanhasDB.obter(campanha_id)
+                logger.info(f"Campanha criada: {campanha_validada.nome} por {session['usuario']}")
+                return jsonify({
+                    'sucesso': True,
+                    'mensagem': f'Campanha "{nova_campanha["nome"]}" criada com sucesso!',
+                    'campanha': campanha_para_json(nova_campanha)
+                }), 201
+            else:
+                return jsonify({'erro': 'Erro ao criar campanha'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao criar campanha: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
 
 
 @app.route('/api/campanhas/<int:camp_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -268,35 +424,44 @@ def api_campanha_detalhes(camp_id):
     
     # Verificar permissão
     if usuario['role'] != 'admin' and campanha['criador'] != session['usuario']:
+        logger.warning(f"Acesso negado: {session['usuario']} tentou acessar campanha {camp_id}")
         return jsonify({'erro': 'Acesso negado'}), 403
     
     if request.method == 'GET':
         return jsonify(campanha_para_json(campanha))
     
     elif request.method == 'PUT':
-        # Atualizar campanha
-        data = request.json
-        
-        atualizar_dados = {
-            'nome': data.get('nome'),
-            'descricao': data.get('descricao'),
-            'beneficiarios_json': data.get('beneficiarios'),
-            'mensagem': data.get('mensagem'),
-            'botoes_json': data.get('botoes'),
-            'instancias_json': data.get('instancias')
-        }
-        
-        # Remover valores None
-        atualizar_dados = {k: v for k, v in atualizar_dados.items() if v is not None}
-        
-        if CampanhasDB.atualizar(camp_id, **atualizar_dados):
-            campanha_atualizada = CampanhasDB.obter(camp_id)
-            return jsonify({
-                'sucesso': True,
-                'campanha': campanha_para_json(campanha_atualizada)
-            })
-        else:
-            return jsonify({'erro': 'Erro ao atualizar campanha'}), 500
+        try:
+            # Validar input
+            data = request.json
+            atualizar_dados = {}
+            
+            if 'nome' in data:
+                atualizar_dados['nome'] = data['nome'][:100]
+            if 'descricao' in data:
+                atualizar_dados['descricao'] = data['descricao'][:500]
+            if 'mensagem' in data:
+                atualizar_dados['mensagem'] = data['mensagem'][:4000]
+            if 'beneficiarios' in data:
+                atualizar_dados['beneficiarios_json'] = data['beneficiarios']
+            if 'botoes' in data:
+                atualizar_dados['botoes_json'] = data['botoes']
+            if 'instancias' in data:
+                atualizar_dados['instancias_json'] = data['instancias']
+            
+            if CampanhasDB.atualizar(camp_id, **atualizar_dados):
+                campanha_atualizada = CampanhasDB.obter(camp_id)
+                logger.info(f"Campanha atualizada: {camp_id}")
+                return jsonify({
+                    'sucesso': True,
+                    'campanha': campanha_para_json(campanha_atualizada)
+                })
+            else:
+                return jsonify({'erro': 'Erro ao atualizar campanha'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao atualizar campanha: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
     
     elif request.method == 'DELETE':
         # Deletar campanha
@@ -304,19 +469,20 @@ def api_campanha_detalhes(camp_id):
             return jsonify({'erro': 'Só é possível deletar campanhas em rascunho'}), 400
         
         if CampanhasDB.deletar(camp_id):
+            logger.info(f"Campanha deletada: {camp_id}")
             return jsonify({'sucesso': True, 'mensagem': 'Campanha deletada'})
         else:
             return jsonify({'erro': 'Erro ao deletar campanha'}), 500
 
 
 # ============================================================
-# ROTAS DE DISPARO
+# ROTAS DE DISPARO (COM EVOLUTION API)
 # ============================================================
 
 @app.route('/api/campanhas/<int:camp_id>/disparar', methods=['POST'])
 @requer_login
-def disparar_campanha(camp_id):
-    """Dispara uma campanha"""
+def Disparar_campanha(camp_id):
+    """Dispara uma campanha via Evolution API"""
     usuario = obter_usuario_atual()
     
     campanha = CampanhasDB.obter(camp_id)
@@ -325,30 +491,61 @@ def disparar_campanha(camp_id):
     
     # Verificar permissão
     if usuario['role'] != 'admin' and campanha['criador'] != session['usuario']:
+        logger.warning(f"Acesso negado: {session['usuario']} tentou disparar campanha {camp_id}")
         return jsonify({'erro': 'Acesso negado'}), 403
     
     if not campanha['beneficiarios_json']:
         return jsonify({'erro': 'Nenhum beneficiário configurado'}), 400
     
-    # Simular disparo (em produção, conectaria com Evolution API)
+    # Verificar instância primeiro
+    instancia_status = checar_instancia_evolution()
+    logger.info(f"Status da instância: {instancia_status}")
+    
     resultados = []
+    delay = int(os.getenv('MESSAGE_DELAY', '5'))
     
     try:
         for idx, beneficiario in enumerate(campanha['beneficiarios_json']):
-            # Aqui entra a lógica real de envio via Evolution API
+            numero = beneficiario.get('numero', '')
+            nome = beneficiario.get('nome', 'N/A')
+            
+            if not numero:
+                resultados.append({
+                    'beneficiario': nome,
+                    'numero': numero,
+                    'status': 'erro',
+                    'message': 'Número não informado'
+                })
+                continue
+            
+            # Adicionar delay entre envios
+            if idx > 0:
+                import time
+                time.sleep(delay)
+            
+            # Enviar via Evolution API
+            resultado = enviar_whatsapp_evolution(
+                numero=numero,
+                mensagem=campanha['mensagem'],
+                botoes=campanha['botoes_json'],
+                instance_name=campanha['instancias_json'][0] if campanha['instancias_json'] else None
+            )
+            
             resultados.append({
-                'beneficiario': beneficiario.get('nome', 'N/A'),
-                'numero': beneficiario.get('numero', 'N/A'),
-                'status': 'enviado',
+                'beneficiario': nome,
+                'numero': numero,
+                'status': resultado['status'],
                 'timestamp': datetime.now().isoformat()
             })
         
-        # Atualizar campanha (com transação)
+        # Atualizar campanha
+        total_enviados = sum(1 for r in resultados if r['status'] == 'enviado')
+        
         CampanhasDB.atualizar(
             camp_id,
             status='disparado',
             disparado_em=datetime.now().isoformat(),
-            total_enviados=len(resultados)
+            total_enviados=total_enviados
         )
         
         # Registrar no histórico
@@ -359,14 +556,27 @@ def disparar_campanha(camp_id):
             resultados={'enviados': resultados}
         )
         
+        logger.info(f"Campanha {camp_id} Disparada: {total_enviados}/{len(resultados)}")
+        
         return jsonify({
             'sucesso': True,
-            'mensagem': f'{len(resultados)} mensagens disparadas com sucesso!',
-            'resultados': resultados
+            'mensagem': f'{total_enviados} mensagens disparadas com sucesso!',
+            'resultados': resultados,
+            'instancia_status': instancia_status
         })
     
     except Exception as e:
+        logger.error(f"Erro ao Disparar: {str(e)}")
         return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/whatsapp/status')
+@requer_login
+def whatsapp_status():
+    """Verifica status da instância WhatsApp"""
+    instancia = request.args.get('instance', os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01'))
+    status = checar_instancia_evolution(instancia)
+    return jsonify(status)
 
 
 # ============================================================
@@ -378,6 +588,7 @@ def disparar_campanha(camp_id):
 def admin():
     """Dashboard administrativo"""
     usuario = obter_usuario_atual()
+    logger.info(f"Acesso admin: {usuario['email']}")
     return render_template('admin.html', usuario=usuario_para_json(usuario))
 
 
@@ -387,35 +598,44 @@ def api_admin_usuarios():
     """Gerenciar usuários (apenas ADM)"""
     
     if request.method == 'GET':
-        # Listar usuários
         usuarios = UsuariosDB.listar_todos()
         return jsonify([usuario_para_json(u) for u in usuarios])
     
     elif request.method == 'POST':
-        # Criar novo usuário
-        data = request.json
-        
-        email = data.get('email', '').lower()
-        
-        # Verificar se já existe
-        if UsuariosDB.obter(email):
-            return jsonify({'erro': 'Email já cadastrado'}), 400
-        
-        # Criar novo usuário
-        if UsuariosDB.criar(
-            email=email,
-            nome=data.get('nome', 'Novo Usuário'),
-            senha=data.get('senha', 'Temp@123'),
-            role=data.get('role', 'vendedor')
-        ):
-            usuario_criado = UsuariosDB.obter(email)
-            return jsonify({
-                'sucesso': True,
-                'mensagem': f'Usuário {data.get("nome")} criado com sucesso!',
-                'usuario': usuario_para_json(usuario_criado)
-            }), 201
-        else:
-            return jsonify({'erro': 'Erro ao criar usuário'}), 500
+        try:
+            # Validar input
+            data = request.json
+            usuario_valido = UsuarioCreate(
+                email=data.get('email', ''),
+                nome=data.get('nome', ''),
+                senha=data.get('senha', 'Temp@123'),
+                role=data.get('role', 'vendedor')
+            )
+            
+            # Verificar se já existe
+            if UsuariosDB.obter(usuario_valido.email):
+                return jsonify({'erro': 'Email já cadastrado'}), 400
+            
+            # Criar novo usuário
+            if UsuariosDB.criar(
+                email=usuario_valido.email,
+                nome=usuario_valido.nome,
+                senha=usuario_valido.senha,
+                role=usuario_valido.role
+            ):
+                usuario_criado = UsuariosDB.obter(usuario_valido.email)
+                logger.info(f"Usuário criado: {usuario_valido.email} por {session['usuario']}")
+                return jsonify({
+                    'sucesso': True,
+                    'mensagem': f'Usuário {usuario_valido.nome} criado com sucesso!',
+                    'usuario': usuario_para_json(usuario_criado)
+                }), 201
+            else:
+                return jsonify({'erro': 'Erro ao criar usuário'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao criar usuário: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
 
 
 @app.route('/api/admin/usuarios/<email>', methods=['PUT', 'DELETE'])
@@ -428,24 +648,37 @@ def api_admin_usuario_detalhes(email):
         return jsonify({'erro': 'Usuário não encontrado'}), 404
     
     if request.method == 'PUT':
-        data = request.json
-        
-        if UsuariosDB.atualizar(
-            email,
-            nome=data.get('nome'),
-            role=data.get('role')
-        ):
-            usuario_atualizado = UsuariosDB.obter(email)
-            return jsonify({
-                'sucesso': True,
-                'usuario': usuario_para_json(usuario_atualizado)
-            })
-        else:
-            return jsonify({'erro': 'Erro ao atualizar usuário'}), 500
+        try:
+            data = request.json
+            usuario_valido = UsuarioUpdate(
+                nome=data.get('nome'),
+                role=data.get('role')
+            )
+            
+            atualizar_dados = {}
+            if usuario_valido.nome:
+                atualizar_dados['nome'] = usuario_valido.nome
+            if usuario_valido.role:
+                atualizar_dados['role'] = usuario_valido.role
+            
+            if UsuariosDB.atualizar(email, **atualizar_dados):
+                usuario_atualizado = UsuariosDB.obter(email)
+                logger.info(f"Usuário atualizado: {email}")
+                return jsonify({
+                    'sucesso': True,
+                    'usuario': usuario_para_json(usuario_atualizado)
+                })
+            else:
+                return jsonify({'erro': 'Erro ao atualizar usuário'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao atualizar usuário: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
     
     elif request.method == 'DELETE':
         # Soft delete - apenas desativa
         if UsuariosDB.deletar(email):
+            logger.info(f"Usuário desativado: {email}")
             return jsonify({'sucesso': True, 'mensagem': 'Usuário desativado'})
         else:
             return jsonify({'erro': 'Erro ao desativar usuário'}), 500
@@ -489,12 +722,19 @@ def health():
     usuarios = UsuariosDB.listar_todos()
     campanhas = CampanhasDB.listar_todas()
     
+    # Verificar Evolution API
+    evolution_status = checar_instancia_evolution()
+    
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
-        'usuarios': len(usuarios),
-        'campanhas': len(campanhas),
-        'database': 'SQLite'
+        'versao': '2.0',
+        'database': {
+            'usuarios': len(usuarios),
+            'campanhas': len(campanhas),
+            'tipo': 'SQLite'
+        },
+        'whatsapp': evolution_status
     })
 
 
@@ -504,12 +744,20 @@ def health():
 
 @app.errorhandler(404)
 def not_found(e):
+    logger.warning(f"404 - {request.path}")
     return jsonify({'erro': 'Não encontrado'}), 404
 
 
 @app.errorhandler(500)
 def server_error(e):
+    logger.error(f"500 - {str(e)}")
     return jsonify({'erro': 'Erro interno do servidor'}), 500
+
+
+@app.errorhandler(429)
+def rate_limit_handler(e):
+    logger.warning(f"Rate limit excedido: {request.ip}")
+    return jsonify({'erro': 'Limite de requisições excedido. Tente novamente mais tarde.'}), 429
 
 
 # ============================================================
@@ -518,14 +766,24 @@ def server_error(e):
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print(" 🚀 PARISCRED INTELLIGENCE - SaaS COMPLETO (SQLite)")
+    print(" PARISCRED INTELLIGENCE v2.0 - SEGURO")
     print("="*70)
-    print(f"\n ✓ Servidor iniciando na porta 5000...")
-    print(f" ✓ Acessar em: http://localhost:5000")
-    print(f" ✓ Banco de dados: app.db (SQLite)")
-    print(f"\n 📱 Contas de Teste (após migração):")
+    print(f"\n Servidor iniciando na porta 5000...")
+    print(f" Acessar em: http://localhost:5000")
+    print(f" Banco de dados: app.db (SQLite)")
+    print(f" Evolution API: {os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')}")
+    print(f" Rate Limiting: ATIVADO")
+    print(f" Logging: {LOG_LEVEL}")
+    print(f"\n Contas de Teste:")
     print(f"   ADM: admin@pariscred.com / Admin@2025")
-    print(f"   Vendedor: vendedor1@pariscred.com / Vendedor@123")
+    print(f"   Vendedor: vendedor@pariscred.com / Vendedor@123")
     print(f"\n" + "="*70 + "\n")
     
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    # Verificar modo de produção
+    debug_mode = os.getenv('FLASK_ENV', 'production') != 'production'
+    
+    app.run(
+        debug=debug_mode,
+        port=int(os.getenv('PORT', 5000)),
+        host='0.0.0.0'
+    )

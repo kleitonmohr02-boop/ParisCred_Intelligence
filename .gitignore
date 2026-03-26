@@ -11,6 +11,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+# System-reserved
+nul
+logs/
 build/
 develop-eggs/
 dist/

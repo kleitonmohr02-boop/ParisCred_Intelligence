@@ -1,0 +1,44 @@
+LINK PRONTO PARA CLICAR - SIGA 3 PASSOS:
+
+==============================================
+PASSO 1: Criar conta GitHub (2 min)
+==============================================
+1. Acesse: https://github.com/signup
+2. Email, senha, username
+3. Confirmar email
+
+
+==============================================
+PASSO 2: Criar repositório (1 min)
+==============================================
+1. Acesse: https://github.com/new
+2. Nome: ParisCred_Intelligence
+3. Clique: Create repository
+4. Copie o link HTTPS que apareceu
+
+
+==============================================
+PASSO 3: FAZER PUSH (via terminal aqui)
+==============================================
+Cole aqui seu link HTTPS do repo ↓
+
+[SEU_LINK_HTTPS]
+
+Depois envie:
+git branch -M main
+git remote add origin [SEU_LINK]
+git push -u origin main
+
+
+==============================================
+PASSO 4: DEPLOY (CLIQUE NO LINK)
+==============================================
+Após fazer push, clique em um desses:
+
+OPÇÃO A - Railway (MELHOR):
+https://railway.app/new?templateUrl=https://github.com/SEU_USUARIO/ParisCred_Intelligence
+
+OPÇÃO B - Render:
+https://render.com/deploy?repo=https://github.com/SEU_USUARIO/ParisCred_Intelligence
+
+PRONTO! Sistema online em 5 min! 🚀

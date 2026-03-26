@@ -1,0 +1,16 @@
+# API Keys Configuration
+# Copy this file to .env and fill in your keys
+
+# Google Gemini (RECOMMENDED - FREE tier)
+# Get key at: https://aistudio.google.com/apikey
+# Free: 250 requests/day, 15 requests/minute
+GOOGLE_API_KEY=your_google_gemini_api_key_here
+
+# OpenAI (Optional - paid)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Anthropic Claude (Optional - limited in 3rd party tools)
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Groq (Optional - free tier available)
+GROQ_API_KEY=your_groq_api_key_here
