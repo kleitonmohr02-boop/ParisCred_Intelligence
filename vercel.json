@@ -2,7 +2,7 @@
   "builds": [
     {
       "src": "app_novo.py",
-      "use": "vercel-python"
+      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -13,10 +13,7 @@
   ],
   "env": {
     "SECRET_KEY": "@secret_key",
-    "DATABASE_PATH": "/tmp/pariscred.db",
-    "OPENAI_API_KEY": "@openai_api_key",
-    "EVOLUTION_API_URL": "https://your-evolution-api.com",
-    "EVOLUTION_API_KEY": "@evolution_api_key",
-    "EVOLUTION_INSTANCE_NAME": "Paris_01"
+    "FLASK_ENV": "production",
+    "DATABASE_URL": "@database_url"
   }
 }
