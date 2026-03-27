@@ -298,9 +298,10 @@ class FinanceiroDB:
             emp_ativos = cursor.fetchone()['total']
             
             # Parcelas atrasadas
+            data_agora = "CURRENT_TIMESTAMP" if db.is_postgres else "datetime('now')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM parcelas 
-                WHERE status = 'pendente' AND data_vencimento < {'CURRENT_TIMESTAMP' if db.is_postgres else "datetime('now')"} AND ativo = {db.bool_def(True)}
+                WHERE status = 'pendente' AND data_vencimento < {data_agora} AND ativo = {db.bool_def(True)}
             """)
             atrasadas = cursor.fetchone()['total']
         

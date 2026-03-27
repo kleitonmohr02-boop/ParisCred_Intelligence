@@ -63,9 +63,10 @@ class AdminReportsDB:
             taxa_aprovacao = (aprovadas / total_propostas * 100) if total_propostas > 0 else 0
             
             # Risco
+            data_agora = "CURRENT_TIMESTAMP" if db.is_postgres else "datetime('now')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM parcelas 
-                WHERE status = 'pendente' AND data_vencimento < {'CURRENT_TIMESTAMP' if db.is_postgres else "datetime('now')"} AND ativo = {db.bool_def(True)}
+                WHERE status = 'pendente' AND data_vencimento < {data_agora} AND ativo = {db.bool_def(True)}
             """)
             atrasadas = cursor.fetchone()['total']
             
@@ -239,9 +240,10 @@ class AdminReportsDB:
             cursor = conn.cursor()
             
             # 1. Taxa de inadimplência alta
+            data_agora = "CURRENT_TIMESTAMP" if db.is_postgres else "datetime('now')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM parcelas 
-                WHERE status = 'pendente' AND data_vencimento < {'CURRENT_TIMESTAMP' if db.is_postgres else "datetime('now')"}
+                WHERE status = 'pendente' AND data_vencimento < {data_agora}
             """)
             row_atrasadas = cursor.fetchone()
             atrasadas = row_atrasadas['total'] if row_atrasadas else 0
@@ -255,10 +257,8 @@ class AdminReportsDB:
                 })
             
             # 2. Pouco movimento
-            cursor.execute(f"""
-                SELECT COUNT(*) as total FROM emprestimos 
-                WHERE data_solicitacao >= {'CURRENT_TIMESTAMP - INTERVAL \'7 days\'' if db.is_postgres else "datetime('now', '-7 days')"}
-            """)
+            query_recentes = "SELECT COUNT(*) as total FROM emprestimos WHERE data_solicitacao >= CURRENT_TIMESTAMP - INTERVAL '7 days'" if db.is_postgres else "SELECT COUNT(*) as total FROM emprestimos WHERE data_solicitacao >= datetime('now', '-7 days')"
+            cursor.execute(query_recentes)
             row_recentes = cursor.fetchone()
             recentes = row_recentes['total'] if row_recentes else 0
             
@@ -271,10 +271,11 @@ class AdminReportsDB:
                 })
             
             # 3. Clientes sem movimento
+            data_30dias = "CURRENT_TIMESTAMP - INTERVAL '30 days'" if db.is_postgres else "datetime('now', '-30 days')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM clientes 
                 WHERE status = 'lead' AND 
-                data_criacao < {'CURRENT_TIMESTAMP - INTERVAL \'30 days\'' if db.is_postgres else "datetime('now', '-30 days')"}
+                data_criacao < {data_30dias}
             """)
             row_leads = cursor.fetchone()
             leads_antigos = row_leads['total'] if row_leads else 0
