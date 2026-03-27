@@ -136,6 +136,23 @@ class Database:
                 )
             """)
             
+            # CRIAR USUÁRIO ADMIN PADRÃO SE NÃO EXISTIR
+            cursor.execute(f"SELECT COUNT(*) FROM usuarios")
+            if cursor.fetchone()[0] == 0:
+                import bcrypt
+                email = "admin@pariscred.com"
+                nome = "Administrador"
+                senha = "Admin@2025"
+                role = "admin"
+                senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                
+                p = self.placeholder()
+                cursor.execute(f"""
+                    INSERT INTO usuarios (email, nome, senha_hash, role)
+                    VALUES ({p}, {p}, {p}, {p})
+                """, (email, nome, senha_hash, role))
+                logger.info("Usuário admin@pariscred.com criado por padrão.")
+            
             conn.commit()
 
 
