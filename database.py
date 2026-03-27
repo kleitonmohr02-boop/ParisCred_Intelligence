@@ -135,8 +135,12 @@ class Database:
             """)
             
             # CRIAR USUÁRIO ADMIN PADRÃO SE NÃO EXISTIR
-            cursor.execute(f"SELECT COUNT(*) FROM usuarios")
-            if cursor.fetchone()[0] == 0:
+            cursor.execute(f"SELECT COUNT(*) as total FROM usuarios")
+            row = cursor.fetchone()
+            # Compatibilidade para RealDictRow e Tupla
+            total = row['total'] if isinstance(row, dict) else row[0]
+            
+            if total == 0:
                 import bcrypt
                 email = "admin@pariscred.com"
                 nome = "Administrador"
