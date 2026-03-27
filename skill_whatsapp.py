@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, List
 from database import Database
-from modulo_ia import agente_ia
+from modulo_ia import agente_ia, ia_fallback
 
 
 class WhatsAppDB:
@@ -258,73 +258,16 @@ class WhatsAppDB:
     
     @staticmethod
     def _classificar_e_responder(mensagem: str, cliente: Dict = None) -> str:
-        """Classifica intenção e gera resposta (com IA OLLAMA)"""
+        """Classifica intenção e gera resposta (com IA Gemini)"""
         
-        # 1. Tentar resposta pela IA Local (Ollama)
+        # 1. Tentar resposta pela IA (Gemini)
         if agente_ia.esta_online():
             resposta_ia = agente_ia.gerar_resposta(mensagem, cliente)
             if resposta_ia:
                 return resposta_ia
         
-        # 2. Fallback: Lógica de Palavras-chave tradicional
-        mensagem_lower = mensagem.lower()
-        
-        # Palavras-chave
-        if any(word in mensagem_lower for word in ["emprestimo", "loan", "credito", "credit"]):
-            return """
-Ótimo! Vamos ajudá-lo com um empréstimo consignado.
-
-Qual é o valor que você precisa emprestar?
-(Valores entre R$ 500 e R$ 50.000)
-            """
-        
-        elif any(word in mensagem_lower for word in ["simulacao", "simular", "quanto", "parcela"]):
-            return """
-Simulação de Empréstimo:
-
-Para simular, me diga:
-1. Valor desejado (ex: 5000)
-2. Número de parcelas (ex: 60)
-
-Vou calcular tudo pra você!
-            """
-        
-        elif any(word in mensagem_lower for word in ["minha", "conta", "saldo", "extrato"]):
-            if cliente:
-                return f"""
-Dados da sua conta, {cliente.get('nome', 'Cliente')}:
-- Status: {cliente.get('status', 'ativo')}
-- Margem Disponível: R$ {cliente.get('margem_consignavel', 0)}
-- Última atualização: {cliente.get('data_criacao')}
-
-Precisa de algo mais?
-                """
-            else:
-                return "Para acessar sua conta, precisamos do seu cadastro."
-        
-        elif any(word in mensagem_lower for word in ["oi", "olá", "opa", "e ai"]):
-            return """
-Olá! Bem-vindo ao ParisCred! 👋
-
-Como posso ajudá-lo hoje?
-- Empréstimo consignado
-- Simulação
-- Dados da conta
-- Suporte
-            """
-        
-        else:
-            return """
-Desculpe, não entendi. 😅
-
-Posso ajudar com:
-- Empréstimo consignado
-- Simulação
-- Dados da conta
-- Suporte técnico
-
-O que você quer fazer?
-            """
+        # 2. Fallback: Sistema de palavras-chave
+        return ia_fallback.responder(mensagem)
 
 
 # Inicializar tabelas
