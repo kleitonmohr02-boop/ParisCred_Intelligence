@@ -362,6 +362,22 @@ def campanhas():
     return render_template('campanhas.html', usuario=usuario_para_json(usuario))
 
 
+@app.route('/crm')
+@requer_login
+def crm():
+    """Página de CRM - Gestão de Clientes"""
+    usuario = obter_usuario_atual()
+    return render_template('crm.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/financeiro')
+@requer_login
+def financeiro():
+    """Página do Sistema Financeiro"""
+    usuario = obter_usuario_atual()
+    return render_template('financeiro.html', usuario=usuario_para_json(usuario))
+
+
 @app.route('/api/campanhas', methods=['GET', 'POST'])
 @requer_login
 def api_campanhas():

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM - ParisCred Intelligence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; color: #333; }
+        .container { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; overflow-y: auto; }
+        .sidebar-logo { font-size: 32px; margin-bottom: 10px; }
+        .sidebar-title { font-size: 14px; font-weight: 600; margin-bottom: 30px; opacity: 0.9; }
+        .nav-group { margin-bottom: 30px; }
+        .nav-title { font-size: 12px; text-transform: uppercase; opacity: 0.7; margin-bottom: 12px; }
+        .nav-item { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: block; color: white; }
+        .nav-item:hover { background: rgba(255, 255, 255, 0.2); }
+        .nav-item.active { background: rgba(255, 255, 255, 0.3); font-weight: 600; }
+        .user-section { border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 20px; margin-top: 30px; }
+        .user-info { margin-bottom: 15px; }
+        .user-name { font-weight: 600; font-size: 14px; }
+        .user-role { font-size: 12px; opacity: 0.8; margin-top: 3px; }
+        .logout-btn { width: 100%; padding: 10px; background: rgba(255, 255, 255, 0.2); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .logout-btn:hover { background: rgba(255, 255, 255, 0.3); }
+        .main { flex: 1; padding: 40px; overflow-y: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .header h1 { font-size: 32px; color: #333; }
+        .btn-novo { padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .btn-novo:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4); }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .stat-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-top: 4px solid #667eea; }
+        .stat-label { font-size: 14px; color: #666; margin-bottom: 10px; text-transform: uppercase; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #333; }
+        .search-box { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .search-box input { width: 100%; padding: 12px 20px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 14px; }
+        .search-box input:focus { outline: none; border-color: #667eea; }
+        .filtros { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .filtro-btn { padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 13px; transition: all 0.3s; }
+        .filtro-btn:hover, .filtro-btn.active { background: #667eea; color: white; border-color: #667eea; }
+        .clientes-grid { display: grid; gap: 15px; }
+        .cliente-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.3s; }
+        .cliente-card:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15); }
+        .cliente-info { flex: 1; }
+        .cliente-nome { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 5px; }
+        .cliente-phone { font-size: 14px; color: #666; }
+        .cliente-meta { display: flex; gap: 15px; margin-top: 8px; font-size: 12px; color: #999; }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-lead { background: #fff3cd; color: #856404; }
+        .badge-ativo { background: #d4edda; color: #155724; }
+        .badge-inativo { background: #f8d7da; color: #721c24; }
+        .badge-negociacao { background: #cce5ff; color: #004085; }
+        .badge-concluido { background: #d4edda; color: #155724; }
+        .badge-emprestimo { background: #e2e3e5; color: #383d41; }
+        .cliente-actions { display: flex; gap: 8px; }
+        .btn-small { padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .btn-whatsapp { background: #25D366; color: white; border: none; }
+        .btn-simular { background: #667eea; color: white; border: none; }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 15px; padding: 30px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { font-size: 24px; font-weight: 600; margin-bottom: 20px; }
+        form { display: flex; flex-direction: column; gap: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px; }
+        input, select, textarea { padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #667eea; }
+        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-cancel { padding: 12px 24px; background: #e0e0e0; color: #333; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-submit { padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #666; }
+        .empty-icon { font-size: 64px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-logo">🚀</div>
+            <div class="sidebar-title">ParisCred Intelligence</div>
+            <div class="nav-group">
+                <div class="nav-title">Menu</div>
+                <a href="/dashboard" class="nav-item">📊 Dashboard</a>
+                <a href="/crm" class="nav-item active">👥 CRM</a>
+                <a href="/campanhas" class="nav-item">📧 Campanhas</a>
+                <a href="/financeiro" class="nav-item">💰 Financeiro</a>
+            </div>
+            <div class="nav-group" id="admin-menu" style="display:none;">
+                <div class="nav-title">Administração</div>
+                <a href="/admin" class="nav-item">⚙️ Painel ADM</a>
+            </div>
+            <div class="user-section">
+                <div class="user-info">
+                    <div class="user-name" id="user-name">Carregando...</div>
+                    <div class="user-role" id="user-role">Loading...</div>
+                </div>
+                <button class="logout-btn" onclick="logout()">🚪 Sair</button>
+            </div>
+        </div>
+        
+        <div class="main">
+            <div class="header">
+                <div>
+                    <h1>👥 Gestão de Clientes</h1>
+                    <p style="color: #666; margin-top: 5px;">Gerencie seus clientes e leads</p>
+                </div>
+                <button class="btn-novo" onclick="abrirModalCliente()">+ Novo Cliente</button>
+            </div>
+            
+            <div class="stats" id="stats-container">
+                <div class="stat-card">
+                    <div class="stat-label">👥 Total Clientes</div>
+                    <div class="stat-value" id="stat-total">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">🎯 Leads</div>
+                    <div class="stat-value" id="stat-leads">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">🤝 Em Negociação</div>
+                    <div class="stat-value" id="stat-negociacao">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">✅ Concluídos</div>
+                    <div class="stat-value" id="stat-concluidos">-</div>
+                </div>
+            </div>
+            
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="🔍 Buscar por nome, CPF ou telefone..." oninput="filtrarClientes()">
+                <div class="filtros">
+                    <button class="filtro-btn active" onclick="filtrarPorStatus('todos')">Todos</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('lead')">🎯 Leads</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('ativo')">🤝 Em Negociação</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('emprestimo')">💰 Com Empréstimo</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('inativo')">❌ Inativos</button>
+                </div>
+            </div>
+            
+            <div class="clientes-grid" id="clientes-list">
+                <div class="empty-state">
+                    <div class="empty-icon">👥</div>
+                    <p>Nenhum cliente encontrado</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal-cliente">
+        <div class="modal-content">
+            <div class="modal-header">👥 Novo Cliente</div>
+            <form onsubmit="salvarCliente(event)">
+                <div class="form-group">
+                    <label for="cliente-nome">Nome Completo *</label>
+                    <input type="text" id="cliente-nome" required>
+                </div>
+                <div class="form-group">
+                    <label for="cliente-cpf">CPF</label>
+                    <input type="text" id="cliente-cpf" placeholder="000.000.000-00">
+                </div>
+                <div class="form-group">
+                    <label for="cliente-phone">Telefone *</label>
+                    <input type="text" id="cliente-phone" placeholder="(11) 99999-9999" required>
+                </div>
+                <div class="form-group">
+                    <label for="cliente-email">Email</label>
+                    <input type="email" id="cliente-email">
+                </div>
+                <div class="form-group">
+                    <label for="cliente-margem">Margem Consignável (R$)</label>
+                    <input type="number" id="cliente-margem" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="cliente-status">Status</label>
+                    <select id="cliente-status">
+                        <option value="lead">🎯 Lead</option>
+                        <option value="ativo">🤝 Em Negociação</option>
+                        <option value="emprestimo">💰 Com Empréstimo</option>
+                        <option value="inativo">❌ Inativo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="cliente-obs">Observações</label>
+                    <textarea id="cliente-obs" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="fecharModalCliente()">Cancelar</button>
+                    <button type="submit" class="btn-submit">💾 Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let todosClientes = [];
+        let filtroAtual = 'todos';
+        
+        fetch('/api/usuario')
+            .then(r => r.json())
+            .then(user => {
+                document.getElementById('user-name').textContent = user.nome;
+                document.getElementById('user-role').textContent = user.role === 'admin' ? '👑 Administrador' : '📱 Vendedor';
+                if (user.role === 'admin') document.getElementById('admin-menu').style.display = 'block';
+            });
+        
+        function carregarClientes() {
+            fetch('/api/crm/clientes')
+                .then(r => r.json())
+                .then(data => {
+                    todosClientes = Array.isArray(data) ? data : (data.clientes || []);
+                    atualizarStats();
+                    renderizarClientes();
+                });
+        }
+        
+        function atualizarStats() {
+            const total = todosClientes.length;
+            const leads = todosClientes.filter(c => c.status === 'lead').length;
+            const negociacao = todosClientes.filter(c => c.status === 'ativo').length;
+            const concluidos = todosClientes.filter(c => c.status === 'emprestimo').length;
+            
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-leads').textContent = leads;
+            document.getElementById('stat-negociacao').textContent = negociacao;
+            document.getElementById('stat-concluidos').textContent = concluidos;
+        }
+        
+        function renderizarClientes() {
+            const container = document.getElementById('clientes-list');
+            let clientes = todosClientes;
+            
+            if (filtroAtual !== 'todos') {
+                clientes = clientes.filter(c => c.status === filtroAtual);
+            }
+            
+            const busca = document.getElementById('search-input').value.toLowerCase();
+            if (busca) {
+                clientes = clientes.filter(c => 
+                    (c.nome && c.nome.toLowerCase().includes(busca)) ||
+                    (c.phone && c.phone.includes(busca)) ||
+                    (c.cpf && c.cpf.includes(busca))
+                );
+            }
+            
+            if (clientes.length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>Nenhum cliente encontrado</p></div>`;
+                return;
+            }
+            
+            container.innerHTML = clientes.map(c => `
+                <div class="cliente-card">
+                    <div class="cliente-info">
+                        <div class="cliente-nome">${c.nome || 'Sem nome'}</div>
+                        <div class="cliente-phone">📱 ${c.phone || 'Sem telefone'}</div>
+                        <div class="cliente-meta">
+                            <span>📅 ${c.data_criacao ? new Date(c.data_criacao).toLocaleDateString('pt-BR') : 'Sem data'}</span>
+                            ${c.margem_consignavel ? `<span>💰 R$ ${parseFloat(c.margem_consignavel).toFixed(2)}</span>` : ''}
+                        </div>
+                    </div>
+                    <span class="badge badge-${c.status || 'lead'}">${getLabelStatus(c.status)}</span>
+                    <div class="cliente-actions">
+                        <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}')">💬</button>
+                        <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function getLabelStatus(status) {
+            const labels = { 'lead': '🎯 Lead', 'ativo': '🤝 Negociação', 'emprestimo': '💰 Empréstimo', 'inativo': '❌ Inativo' };
+            return labels[status] || '🎯 Lead';
+        }
+        
+        function filtrarPorStatus(status) {
+            filtroAtual = status;
+            document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            renderizarClientes();
+        }
+        
+        function filtrarClientes() {
+            renderizarClientes();
+        }
+        
+        function abrirModalCliente() {
+            document.getElementById('modal-cliente').classList.add('active');
+        }
+        
+        function fecharModalCliente() {
+            document.getElementById('modal-cliente').classList.remove('active');
+            document.querySelector('#modal-cliente form').reset();
+        }
+        
+        function salvarCliente(e) {
+            e.preventDefault();
+            const dados = {
+                nome: document.getElementById('cliente-nome').value,
+                cpf: document.getElementById('cliente-cpf').value,
+                phone: document.getElementById('cliente-phone').value,
+                email: document.getElementById('cliente-email').value,
+                margem_consignavel: parseFloat(document.getElementById('cliente-margem').value) || 0,
+                status: document.getElementById('cliente-status').value,
+                observacoes: document.getElementById('cliente-obs').value
+            };
+            
+            fetch('/api/crm/clientes', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(dados)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.sucesso || data.id) {
+                    alert('Cliente salvo com sucesso!');
+                    fecharModalCliente();
+                    carregarClientes();
+                } else {
+                    alert('Erro: ' + (data.erro || 'Erro desconhecido'));
+                }
+            });
+        }
+        
+        function enviarWhatsapp(phone) {
+            if (phone) {
+                window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank');
+            }
+        }
+        
+        function simularEmprestimo(clienteId) {
+            window.location.href = `/financeiro?cliente=${clienteId}`;
+        }
+        
+        function logout() {
+            window.location = '/logout';
+        }
+        
+        carregarClientes();
+    </script>
+</body>
+</html>
