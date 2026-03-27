@@ -151,6 +151,7 @@ class WhatsAppDB:
             if not instancia_id:
                 return {"sucesso": False, "mensagem": "Instância não encontrada."}
 
+            p = db.placeholder()
             cursor.execute(f"""
                 INSERT INTO whatsapp_mensagens 
                 (instancia_id, destinatario, texto, tipo, direcao, status)

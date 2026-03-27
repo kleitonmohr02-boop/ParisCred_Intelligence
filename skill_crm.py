@@ -181,11 +181,12 @@ class ClientesDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT * FROM interacoes 
-                WHERE cliente_id = ? AND ativo = 1 
-                ORDER BY data DESC 
-                LIMIT ?
+            p = db.placeholder()
+            cursor.execute(f"""
+                SELECT descricao, resultado, data FROM interacoes 
+                WHERE cliente_id = {p} AND ativo = {db.bool_def(True)} 
+                ORDER BY data DESC
+                LIMIT {p}
             """, (cliente_id, limite))
             
             return [dict(row) for row in cursor.fetchall()]
@@ -219,8 +220,8 @@ class ClientesDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT * FROM clientes WHERE phone = ? AND ativo = 1
+            cursor.execute(f"""
+                SELECT * FROM clientes WHERE phone = {db.placeholder()} AND ativo = {db.bool_def(True)}
             """, (phone,))
             row = cursor.fetchone()
             return dict(row) if row else None
