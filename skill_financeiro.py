@@ -21,9 +21,9 @@ class FinanceiroDB:
             cursor = conn.cursor()
             
             # Tabela de empréstimos
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS emprestimos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     cliente_id INTEGER NOT NULL,
                     valor_solicitado DECIMAL(10,2),
                     taxa_juros_anual DECIMAL(5,2),
@@ -37,10 +37,10 @@ class FinanceiroDB:
                 )
             """)
             
-            # Tabela de pagamentos/parcelas
-            cursor.execute("""
+            # Tabela de parcelas
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS parcelas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     emprestimo_id INTEGER NOT NULL,
                     numero_parcela INTEGER,
                     valor_parcela DECIMAL(10,2),
@@ -54,9 +54,9 @@ class FinanceiroDB:
             """)
             
             # Tabela de métricas financeiras
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS metricas_financeiras (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     total_emprestimos DECIMAL(10,2),
                     total_juros_arrecadado DECIMAL(10,2),
@@ -162,10 +162,10 @@ class FinanceiroDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT COUNT(*) as total, 
                        SUM(CASE WHEN status = 'pago' THEN 1 ELSE 0 END) as pagos
-                FROM emprestimos WHERE cliente_id = ? AND ativo = 1
+                FROM emprestimos WHERE cliente_id = {db.placeholder()} AND ativo = 1
             """, (cliente_id,))
             row = dict(cursor.fetchone())
             
@@ -228,21 +228,21 @@ class FinanceiroDB:
                 cursor = conn.cursor()
                 
                 data_vencimento = datetime.now() + timedelta(days=30*parcelas)
-                
-                cursor.execute("""
+                p = db.placeholder()
+                cursor.execute(f"""
                     INSERT INTO emprestimos 
                     (cliente_id, valor_solicitado, taxa_juros_anual, numero_parcelas, status)
-                    VALUES (?, ?, ?, ?, 'aprovado')
+                    VALUES ({p}, {p}, {p}, {p}, 'aprovado')
                 """, (cliente_id, valor, taxa_anual, parcelas))
                 
                 emprestimo_id = cursor.lastrowid
                 
                 # Criar parcelas
                 for parc in simulacao['cronograma']:
-                    cursor.execute("""
+                    cursor.execute(f"""
                         INSERT INTO parcelas 
                         (emprestimo_id, numero_parcela, valor_parcela, valor_juros, data_vencimento)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES ({p}, {p}, {p}, {p}, {p})
                     """, (
                         emprestimo_id,
                         parc['parcela'],

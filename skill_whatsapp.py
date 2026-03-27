@@ -23,13 +23,13 @@ class WhatsAppDB:
             cursor = conn.cursor()
             
             # Instâncias WhatsApp
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS whatsapp_instancias (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     nome_instancia TEXT UNIQUE NOT NULL,
                     phone TEXT,
                     status TEXT DEFAULT 'desconectado',
-                    qrcode LONGBLOB,
+                    qrcode BYTEA,
                     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     data_conexao TIMESTAMP,
                     ultima_atividade TIMESTAMP,
@@ -38,29 +38,39 @@ class WhatsAppDB:
             """)
             
             # Mensagens
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS mensagens_whatsapp (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    numero_origem TEXT,
-                    numero_destino TEXT NOT NULL,
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS whatsapp_mensagens (
+                    id {db.pk_auto()},
+                    instancia_id INTEGER NOT NULL,
+                    destinatario TEXT NOT NULL,
                     texto TEXT,
                     tipo TEXT DEFAULT 'texto',
-                    direcao TEXT,
+                    midia_path TEXT,
+                    direcao TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     status TEXT DEFAULT 'pendente',
-                    data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    instancia TEXT,
-                    message_id TEXT UNIQUE,
-                    ativo BOOLEAN DEFAULT 1
+                    ativo BOOLEAN DEFAULT 1,
+                    FOREIGN KEY (instancia_id) REFERENCES whatsapp_instancias(id)
+                )
+            """)
+            
+            # Campanhas WhatsApp
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS whatsapp_campanhas (
+                    id {db.pk_auto()},
+                    nome TEXT NOT NULL,
+                    payload JSON,
+                    data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
             # Webhooks log
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS webhooks_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     evento TEXT,
-                    payload JSON,
-                    data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    payload TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
@@ -75,9 +85,10 @@ class WhatsAppDB:
         try:
             with db.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
+                p = db.placeholder()
+                cursor.execute(f"""
                     INSERT INTO whatsapp_instancias (nome_instancia, status)
-                    VALUES (?, 'qrcode')
+                    VALUES ({p}, 'qrcode')
                 """, (nome_instancia,))
                 
                 instancia_id = cursor.lastrowid
@@ -108,17 +119,17 @@ class WhatsAppDB:
             return [dict(row) for row in cursor.fetchall()]
     
     @staticmethod
-    def atualizar_status_instancia(nome_instancia: str, novo_status: str) -> Dict:
+    def atualizar_status_instancia(nome_instancia: str, novo_status: str, phone: str = None, data_conexao: str = None) -> Dict:
         """Atualiza status da instância"""
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            p = db.placeholder()
+            cursor.execute(f"""
                 UPDATE whatsapp_instancias 
-                SET status = ?, data_conexao = datetime('now'), ultima_atividade = datetime('now')
-                WHERE nome_instancia = ? AND ativo = 1
-            """, (novo_status, nome_instancia))
-            
+                SET status = {p}, phone = {p}, data_conexao = {p}
+                WHERE nome_instancia = {p}
+            """, (novo_status, phone, data_conexao, nome_instancia))
             conn.commit()
         
         return {"sucesso": True, "novo_status": novo_status}
@@ -131,11 +142,20 @@ class WhatsAppDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO mensagens_whatsapp 
-                (numero_destino, texto, tipo, direcao, status, instancia)
-                VALUES (?, ?, 'texto', 'enviada', 'envio', ?)
-            """, (numero_destino, texto, nome_instancia))
+            # First, get the instance_id from nome_instancia
+            p = db.placeholder()
+            cursor.execute(f"SELECT id FROM whatsapp_instancias WHERE nome_instancia = {p} AND ativo = 1", (nome_instancia,))
+            instancia_row = cursor.fetchone()
+            instancia_id = instancia_row['id'] if instancia_row else None
+
+            if not instancia_id:
+                return {"sucesso": False, "mensagem": "Instância não encontrada."}
+
+            cursor.execute(f"""
+                INSERT INTO whatsapp_mensagens 
+                (instancia_id, destinatario, texto, tipo, direcao, status)
+                VALUES ({p}, {p}, {p}, 'texto', 'enviada', 'envio')
+            """, (instancia_id, numero_destino, texto))
             
             mensagem_id = cursor.lastrowid
             conn.commit()
@@ -156,9 +176,10 @@ class WhatsAppDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            p = db.placeholder()
+            cursor.execute(f"""
                 INSERT INTO webhooks_log (evento, payload)
-                VALUES (?, ?)
+                VALUES ({p}, {p})
             """, (dados.get("event"), json.dumps(dados)))
             
             conn.commit()

@@ -25,6 +25,18 @@ class Database:
         self.is_postgres = DATABASE_URL and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://"))
         self._init_db()
     
+    def pk_auto(self) -> str:
+        """Retorna o snippet SQL para chave primária auto-incremental."""
+        if self.is_postgres:
+            return "SERIAL PRIMARY KEY"
+        return "INTEGER PRIMARY KEY AUTOINCREMENT"
+    
+    def placeholder(self) -> str:
+        """Retorna o marcador de posição para consultas SQL."""
+        if self.is_postgres:
+            return "%s"
+        return "?"
+    
     @contextmanager
     def get_connection(self):
         """Context manager para conexões de banco de dados."""
@@ -71,6 +83,7 @@ class Database:
             primary_key = "PRIMARY KEY" if self.is_postgres else "PRIMARY KEY AUTOINCREMENT"
             
             # Tabela de usuários
+            p = self.placeholder()
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS usuarios (
                     email TEXT PRIMARY KEY,
@@ -83,74 +96,39 @@ class Database:
             """)
             
             # Tabela de campanhas
-            if self.is_postgres:
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS campanhas (
-                        id SERIAL PRIMARY KEY,
-                        nome TEXT NOT NULL,
-                        descricao TEXT,
-                        status TEXT NOT NULL DEFAULT 'rascunho',
-                        criador TEXT NOT NULL,
-                        beneficiarios_json TEXT,
-                        mensagem TEXT NOT NULL,
-                        botoes_json TEXT,
-                        instancias_json TEXT,
-                        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        disparado_em TIMESTAMP,
-                        total_enviados INTEGER DEFAULT 0,
-                        ativo BOOLEAN DEFAULT TRUE,
-                        FOREIGN KEY (criador) REFERENCES usuarios(email)
-                    )
-                """)
-            else:
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS campanhas (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nome TEXT NOT NULL,
-                        descricao TEXT,
-                        status TEXT NOT NULL DEFAULT 'rascunho',
-                        criador TEXT NOT NULL,
-                        beneficiarios_json TEXT,
-                        mensagem TEXT NOT NULL,
-                        botoes_json TEXT,
-                        instancias_json TEXT,
-                        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        disparado_em TIMESTAMP,
-                        total_enviados INTEGER DEFAULT 0,
-                        ativo BOOLEAN DEFAULT 1,
-                        FOREIGN KEY (criador) REFERENCES usuarios(email)
-                    )
-                """)
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS campanhas (
+                    id {self.pk_auto()},
+                    nome TEXT NOT NULL,
+                    descricao TEXT,
+                    status TEXT NOT NULL DEFAULT 'rascunho',
+                    criador TEXT NOT NULL,
+                    beneficiarios_json TEXT,
+                    mensagem TEXT NOT NULL,
+                    botoes_json TEXT,
+                    instancias_json TEXT,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    disparado_em TIMESTAMP,
+                    total_enviados INTEGER DEFAULT 0,
+                    ativo BOOLEAN DEFAULT { 'TRUE' if self.is_postgres else '1' },
+                    FOREIGN KEY (criador) REFERENCES usuarios(email)
+                )
+            """)
             
             # Tabela de histórico
-            if self.is_postgres:
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS historico (
-                        id SERIAL PRIMARY KEY,
-                        campanha_id INTEGER NOT NULL,
-                        usuario TEXT NOT NULL,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        total_beneficiarios INTEGER,
-                        resultados_json TEXT,
-                        ativo BOOLEAN DEFAULT TRUE,
-                        FOREIGN KEY (campanha_id) REFERENCES campanhas(id),
-                        FOREIGN KEY (usuario) REFERENCES usuarios(email)
-                    )
-                """)
-            else:
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS historico (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        campanha_id INTEGER NOT NULL,
-                        usuario TEXT NOT NULL,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        total_beneficiarios INTEGER,
-                        resultados_json TEXT,
-                        ativo BOOLEAN DEFAULT 1,
-                        FOREIGN KEY (campanha_id) REFERENCES campanhas(id),
-                        FOREIGN KEY (usuario) REFERENCES usuarios(email)
-                    )
-                """)
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS historico (
+                    id {self.pk_auto()},
+                    campanha_id INTEGER NOT NULL,
+                    usuario TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    total_beneficiarios INTEGER,
+                    resultados_json TEXT,
+                    ativo BOOLEAN DEFAULT { 'TRUE' if self.is_postgres else '1' },
+                    FOREIGN KEY (campanha_id) REFERENCES campanhas(id),
+                    FOREIGN KEY (usuario) REFERENCES usuarios(email)
+                )
+            """)
             
             conn.commit()
 

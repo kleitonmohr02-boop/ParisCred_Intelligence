@@ -21,9 +21,9 @@ class ClientesDB:
             cursor = conn.cursor()
             
             # Tabela de clientes
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS clientes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     nome TEXT NOT NULL,
                     email TEXT,
                     phone TEXT UNIQUE NOT NULL,
@@ -40,9 +40,9 @@ class ClientesDB:
             """)
             
             # Tabela de interações
-            cursor.execute("""
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS interacoes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {db.pk_auto()},
                     cliente_id INTEGER NOT NULL,
                     tipo TEXT,
                     descricao TEXT,
@@ -86,9 +86,10 @@ class ClientesDB:
             
             with db.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
+                p = db.placeholder()
+                cursor.execute(f"""
                     INSERT INTO clientes (nome, email, phone, cpf, empresa, cargo, renda, margem_consignavel, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'lead')
+                    VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, 'lead')
                 """, (nome, email, phone, cpf, empresa, cargo, renda, margem))
                 
                 cliente_id = cursor.lastrowid
@@ -110,7 +111,7 @@ class ClientesDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM clientes WHERE id = ? AND ativo = 1", (cliente_id,))
+            cursor.execute(f"SELECT * FROM clientes WHERE id = {db.placeholder()} AND ativo = 1", (cliente_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
     
@@ -122,13 +123,13 @@ class ClientesDB:
             cursor = conn.cursor()
             
             if status:
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT * FROM clientes 
-                    WHERE status = ? AND ativo = 1 
-                    LIMIT ?
+                    WHERE status = {db.placeholder()} AND ativo = 1 
+                    LIMIT {db.placeholder()}
                 """, (status, limite))
             else:
-                cursor.execute("SELECT * FROM clientes WHERE ativo = 1 LIMIT ?", (limite,))
+                cursor.execute(f"SELECT * FROM clientes WHERE ativo = 1 LIMIT {db.placeholder()}", (limite,))
             
             return [dict(row) for row in cursor.fetchall()]
     
@@ -143,8 +144,9 @@ class ClientesDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE clientes SET status = ? WHERE id = ? AND ativo = 1
+            p = db.placeholder()
+            cursor.execute(f"""
+                UPDATE clientes SET status = {p} WHERE id = {p} AND ativo = 1
             """, (novo_status, cliente_id))
             conn.commit()
         
@@ -157,12 +159,13 @@ class ClientesDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            p = db.placeholder()
+            cursor.execute(f"""
                 INSERT INTO interacoes (cliente_id, tipo, descricao, resultado)
-                VALUES (?, ?, ?, ?)
+                VALUES ({p}, {p}, {p}, {p})
             """, (cliente_id, tipo, descricao, resultado))
             
-            interacao_id = cursor.lastrowid
+            interacao_id = cursor.lastrowid if not db.is_postgres else 0 # No postgres o cursor.lastrowid pode variar
             conn.commit()
         
         # Atualizar status para 'contatado' se era lead
