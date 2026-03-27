@@ -32,7 +32,7 @@ class FinanceiroDB:
                     data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     data_aprovacao TIMESTAMP,
                     data_vencimento TIMESTAMP,
-                    ativo BOOLEAN DEFAULT 1,
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) },
                     FOREIGN KEY (cliente_id) REFERENCES clientes(id)
                 )
             """)
@@ -48,7 +48,7 @@ class FinanceiroDB:
                     data_vencimento TIMESTAMP,
                     data_pagamento TIMESTAMP,
                     status TEXT DEFAULT 'pendente',
-                    ativo BOOLEAN DEFAULT 1,
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) },
                     FOREIGN KEY (emprestimo_id) REFERENCES emprestimos(id)
                 )
             """)

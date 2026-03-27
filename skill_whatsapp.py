@@ -33,7 +33,7 @@ class WhatsAppDB:
                     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     data_conexao TIMESTAMP,
                     ultima_atividade TIMESTAMP,
-                    ativo BOOLEAN DEFAULT 1
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) }
                 )
             """)
             
@@ -49,7 +49,7 @@ class WhatsAppDB:
                     direcao TEXT NOT NULL,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     status TEXT DEFAULT 'pendente',
-                    ativo BOOLEAN DEFAULT 1,
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) },
                     FOREIGN KEY (instancia_id) REFERENCES whatsapp_instancias(id)
                 )
             """)

@@ -35,7 +35,7 @@ class ClientesDB:
                     margem_consignavel DECIMAL(10,2),
                     custom_fields JSON,
                     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ativo BOOLEAN DEFAULT 1
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) }
                 )
             """)
             
@@ -48,7 +48,7 @@ class ClientesDB:
                     descricao TEXT,
                     resultado TEXT,
                     data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ativo BOOLEAN DEFAULT 1,
+                    ativo BOOLEAN DEFAULT { db.bool_def(True) },
                     FOREIGN KEY (cliente_id) REFERENCES clientes(id)
                 )
             """)

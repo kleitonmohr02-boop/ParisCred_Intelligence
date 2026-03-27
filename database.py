@@ -37,6 +37,12 @@ class Database:
             return "%s"
         return "?"
     
+    def bool_def(self, val: bool) -> str:
+        """Retorna o snippet SQL para valor booleano padrão."""
+        if self.is_postgres:
+            return "TRUE" if val else "FALSE"
+        return "1" if val else "0"
+    
     @contextmanager
     def get_connection(self):
         """Context manager para conexões de banco de dados."""
@@ -91,7 +97,7 @@ class Database:
                     senha_hash TEXT NOT NULL,
                     role TEXT NOT NULL DEFAULT 'user',
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ativo BOOLEAN DEFAULT { 'TRUE' if self.is_postgres else '1' }
+                    ativo BOOLEAN DEFAULT { self.bool_def(True) }
                 )
             """)
             
@@ -110,7 +116,7 @@ class Database:
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     disparado_em TIMESTAMP,
                     total_enviados INTEGER DEFAULT 0,
-                    ativo BOOLEAN DEFAULT { 'TRUE' if self.is_postgres else '1' },
+                    ativo BOOLEAN DEFAULT { self.bool_def(True) },
                     FOREIGN KEY (criador) REFERENCES usuarios(email)
                 )
             """)
@@ -124,7 +130,7 @@ class Database:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     total_beneficiarios INTEGER,
                     resultados_json TEXT,
-                    ativo BOOLEAN DEFAULT { 'TRUE' if self.is_postgres else '1' },
+                    ativo BOOLEAN DEFAULT { self.bool_def(True) },
                     FOREIGN KEY (campanha_id) REFERENCES campanhas(id),
                     FOREIGN KEY (usuario) REFERENCES usuarios(email)
                 )
