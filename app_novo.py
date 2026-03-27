@@ -14,6 +14,8 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 from flask_cors import CORS
 from datetime import datetime
 import secrets
+import threading
+import time
 
 # Importar funções do database
 from database import (
@@ -102,6 +104,9 @@ try:
     criar_rotas_antiban(app)
 except ImportError as e:
     logger.warning(f"Módulo anti-ban não disponível: {e}")
+
+# Controle de disparos em segundo plano
+DISPAROS_ATIVOS = {}
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -482,7 +487,7 @@ def api_campanha_detalhes(camp_id):
 @app.route('/api/campanhas/<int:camp_id>/disparar', methods=['POST'])
 @requer_login
 def Disparar_campanha(camp_id):
-    """Dispara uma campanha via Evolution API"""
+    """Inicia o disparo de uma campanha em segundo plano"""
     usuario = obter_usuario_atual()
     
     campanha = CampanhasDB.obter(camp_id)
@@ -497,40 +502,75 @@ def Disparar_campanha(camp_id):
     if not campanha['beneficiarios_json']:
         return jsonify({'erro': 'Nenhum beneficiário configurado'}), 400
     
-    # Verificar instância primeiro
-    instancia_status = checar_instancia_evolution()
-    logger.info(f"Status da instância: {instancia_status}")
+    # Se já estiver disparando
+    if camp_id in DISPAROS_ATIVOS and DISPAROS_ATIVOS[camp_id]['status'] == 'processando':
+        return jsonify({'erro': 'Esta campanha já está em processamento'}), 400
+    
+    # Iniciar thread de disparo
+    thread = threading.Thread(target=processar_disparo_background, args=(camp_id, session['usuario']))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'sucesso': True,
+        'mensagem': 'Disparo iniciado em segundo plano.',
+        'camp_id': camp_id
+    })
+
+def processar_disparo_background(camp_id, usuario_email):
+    """Função executada em segundo plano para enviar as mensagens"""
+    campanha = CampanhasDB.obter(camp_id)
+    if not campanha: return
+
+    total = len(campanha['beneficiarios_json'])
+    DISPAROS_ATIVOS[camp_id] = {
+        'status': 'processando',
+        'total': total,
+        'enviados': 0,
+        'erros': 0,
+        'inicio': datetime.now().isoformat()
+    }
     
     resultados = []
     delay = int(os.getenv('MESSAGE_DELAY', '5'))
+    instancia_nome = campanha['instancias_json'][0] if campanha['instancias_json'] else None
     
     try:
         for idx, beneficiario in enumerate(campanha['beneficiarios_json']):
+            # Se campanha foi cancelada ou algo assim (futuro)
+            if camp_id not in DISPAROS_ATIVOS: break
+                
             numero = beneficiario.get('numero', '')
             nome = beneficiario.get('nome', 'N/A')
             
             if not numero:
-                resultados.append({
-                    'beneficiario': nome,
-                    'numero': numero,
-                    'status': 'erro',
-                    'message': 'Número não informado'
-                })
+                DISPAROS_ATIVOS[camp_id]['erros'] += 1
                 continue
             
-            # Adicionar delay entre envios
+            # Delay entre envios (exceto o primeiro)
             if idx > 0:
-                import time
                 time.sleep(delay)
+            
+            # Simular digitação (Anti-Ban 2.0)
+            try:
+                from modulo_antiban import anti_ban
+                anti_ban.simular_digitacao(instancia_nome, numero)
+            except Exception:
+                pass
             
             # Enviar via Evolution API
             resultado = enviar_whatsapp_evolution(
                 numero=numero,
                 mensagem=campanha['mensagem'],
                 botoes=campanha['botoes_json'],
-                instance_name=campanha['instancias_json'][0] if campanha['instancias_json'] else None
+                instance_name=instancia_nome
             )
             
+            if resultado['status'] == 'enviado':
+                DISPAROS_ATIVOS[camp_id]['enviados'] += 1
+            else:
+                DISPAROS_ATIVOS[camp_id]['erros'] += 1
+                
             resultados.append({
                 'beneficiario': nome,
                 'numero': numero,
@@ -538,36 +578,36 @@ def Disparar_campanha(camp_id):
                 'timestamp': datetime.now().isoformat()
             })
         
-        # Atualizar campanha
-        total_enviados = sum(1 for r in resultados if r['status'] == 'enviado')
-        
+        # Finalizar
         CampanhasDB.atualizar(
             camp_id,
             status='disparado',
             disparado_em=datetime.now().isoformat(),
-            total_enviados=total_enviados
+            total_enviados=DISPAROS_ATIVOS[camp_id]['enviados']
         )
         
-        # Registrar no histórico
         HistoricoDB.registrar(
             campanha_id=camp_id,
-            usuario=session['usuario'],
+            usuario=usuario_email,
             total_beneficiarios=len(resultados),
             resultados={'enviados': resultados}
         )
         
-        logger.info(f"Campanha {camp_id} Disparada: {total_enviados}/{len(resultados)}")
+        DISPAROS_ATIVOS[camp_id]['status'] = 'concluido'
+        DISPAROS_ATIVOS[camp_id]['fim'] = datetime.now().isoformat()
+        logger.info(f"Campanha {camp_id} finalizada em background")
         
-        return jsonify({
-            'sucesso': True,
-            'mensagem': f'{total_enviados} mensagens disparadas com sucesso!',
-            'resultados': resultados,
-            'instancia_status': instancia_status
-        })
-    
     except Exception as e:
-        logger.error(f"Erro ao Disparar: {str(e)}")
-        return jsonify({'erro': str(e)}), 500
+        logger.error(f"Erro no disparo background {camp_id}: {str(e)}")
+        if camp_id in DISPAROS_ATIVOS:
+            DISPAROS_ATIVOS[camp_id]['status'] = 'erro'
+            DISPAROS_ATIVOS[camp_id]['erro_msg'] = str(e)
+
+@app.route('/api/campanhas/progresso')
+@requer_login
+def api_campanhas_progresso():
+    """Retorna o progresso de todos os disparos ativos"""
+    return jsonify(DISPAROS_ATIVOS)
 
 
 @app.route('/api/whatsapp/status')

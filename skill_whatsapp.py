@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, List
 from database import Database
+from modulo_ia import agente_ia
 
 
 class WhatsAppDB:
@@ -235,8 +236,15 @@ class WhatsAppDB:
     
     @staticmethod
     def _classificar_e_responder(mensagem: str, cliente: Dict = None) -> str:
-        """Classifica intenção e gera resposta"""
+        """Classifica intenção e gera resposta (com IA OLLAMA)"""
         
+        # 1. Tentar resposta pela IA Local (Ollama)
+        if agente_ia.esta_online():
+            resposta_ia = agente_ia.gerar_resposta(mensagem, cliente)
+            if resposta_ia:
+                return resposta_ia
+        
+        # 2. Fallback: Lógica de Palavras-chave tradicional
         mensagem_lower = mensagem.lower()
         
         # Palavras-chave

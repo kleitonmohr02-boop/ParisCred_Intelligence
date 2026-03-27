@@ -15,6 +15,7 @@ import os
 import time
 import random
 import logging
+import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from collections import defaultdict
@@ -179,6 +180,39 @@ class GerenciadorAntiBan:
     def get_intervalo(self) -> int:
         """Retorna intervalo aleatório entre envios"""
         return random.randint(self.min_intervalo, self.max_intervalo)
+    
+    def simular_digitacao(self, instancia: str, numero: str, segundos: int = 0):
+        """Simula o status 'digitando...' via Evolution API"""
+        if segundos == 0:
+            segundos = random.randint(3, 7)
+            
+        try:
+            base_url = os.getenv("EVOLUTION_API_URL", "http://localhost:8080")
+            api_key = os.getenv("EVOLUTION_API_KEY")
+            
+            payload = {
+                "number": numero,
+                "presence": "composing",
+                "delay": segundos * 1000
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "apikey": api_key
+            }
+            
+            # Enviar evento de presença
+            requests.post(
+                f"{base_url}/chat/retrivePresence/{instancia}",
+                json=payload,
+                headers=headers,
+                timeout=5
+            )
+            logger.info(f"Simulando digitação para {numero} por {segundos}s")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao simular digitação: {e}")
+            return False
     
     def get_mensagem_variante(self, tipo: str, nome: str) -> str:
         """Retorna uma variante aleatória da mensagem"""
