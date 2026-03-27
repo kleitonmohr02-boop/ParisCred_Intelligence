@@ -53,11 +53,9 @@ class Database:
             # Ajuste para URLs do Heroku/Vercel (postgres:// -> postgresql://)
             url = DATABASE_URL.replace("postgres://", "postgresql://")
             
-            conn = psycopg2.connect(url)
+            conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
             try:
-                # Usar cursor que retorna dicionários no Postgres para manter compatibilidade
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    yield conn
+                yield conn
                 conn.commit()
             except Exception as e:
                 conn.rollback()
