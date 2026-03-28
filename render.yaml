@@ -17,7 +17,7 @@ services:
       - key: DATABASE_PATH
         value: app.db
       - key: EVOLUTION_API_URL
-        value: https://evolution.pariscred.com.br
+        value: http://localhost:8080
       - key: EVOLUTION_API_KEY
         value: CONSIGNADO123
       - key: EVOLUTION_INSTANCE_NAME
