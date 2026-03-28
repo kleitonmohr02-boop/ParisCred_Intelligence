@@ -393,6 +393,49 @@ def financeiro():
     return render_template('financeiro.html', usuario=usuario_para_json(usuario))
 
 
+@app.route('/importar')
+@requer_login
+def pagina_importar():
+    """Página de Importar Leads"""
+    usuario = obter_usuario_atual()
+    return render_template('importar.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/coach')
+@requer_login
+def pagina_coach():
+    """Página do Chat IA Coach"""
+    usuario = obter_usuario_atual()
+    return render_template('coach.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/api/coach/chat', methods=['POST'])
+@requer_login
+def api_coach_chat():
+    """API para Chat com IA Coach"""
+    from modulo_ia import agente_ia, ia_fallback
+    
+    data = request.get_json()
+    mensagem = data.get('mensagem', '')
+    
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem vazia'}), 400
+    
+    usuario = obter_usuario_atual()
+    
+    # Tentar usar IA
+    try:
+        resposta = agente_ia.gerar_resposta(mensagem, {'nome': usuario.get('nome', 'Vendedor')})
+        if resposta:
+            return jsonify({'resposta': resposta})
+    except Exception as e:
+        logger.warning(f"Erro no Gemini: {e}")
+    
+    # Fallback
+    resposta_fallback = ia_fallback.responder(mensagem)
+    return jsonify({'resposta': resposta_fallback})
+
+
 @app.route('/api/campanhas', methods=['GET', 'POST'])
 @requer_login
 def api_campanhas():
@@ -823,13 +866,36 @@ def not_found(e):
 def api_seed_dados():
     """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
     if os.getenv('FLASK_ENV') == 'production':
-        return jsonify({'erro': 'Não disponível em produção'}), 403
+        return jsonify({'erro': 'Nao disponivel em producao'}), 403
     
     try:
         from database import db
         
         with db.get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Criar tabela de clientes se nao existir
+            try:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS clientes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome TEXT NOT NULL,
+                        email TEXT,
+                        phone TEXT,
+                        cpf TEXT,
+                        status TEXT DEFAULT 'lead',
+                        empresa TEXT,
+                        cargo TEXT,
+                        renda DECIMAL(10,2),
+                        margem_consignavel DECIMAL(10,2),
+                        banco_atual TEXT,
+                        custom_fields JSON,
+                        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ativo INTEGER DEFAULT 1
+                    )
+                """)
+            except:
+                pass
             
             # Verificar se já tem dados
             cursor.execute("SELECT COUNT(*) FROM campanhas")
@@ -848,10 +914,45 @@ def api_seed_dados():
                         INSERT INTO campanhas (nome, descricao, status, criador, mensagem, beneficiarios_json, botoes_json, instancias_json, total_enviados)
                         VALUES (?, ?, 'rascunho', ?, 'Olá! Temos uma proposta especial para você!', '[]', '[]', '[]', 0)
                     """, (nome, desc, criador))
+            
+            # Verificar clientes
+            cursor.execute("SELECT COUNT(*) FROM clientes")
+            qtd_cli = cursor.fetchone()[0]
+            
+            if qtd_cli == 0:
+                # Criar 20 clientes de exemplo
+                clientes = [
+                    ('Jose da Silva', 'jose@email.com', '48999991111', '12345678901', 'lead', 2500.00, 'INSS'),
+                    ('Maria Santos', 'maria@email.com', '48999992222', '23456789012', 'qualificado', 3200.00, 'INSS'),
+                    ('Pedro Costa', 'pedro@email.com', '48999993333', '34567890123', 'proposta', 1800.00, 'CLT'),
+                    ('Ana Oliveira', 'ana@email.com', '48999994444', '45678901234', 'negociacao', 4500.00, 'INSS'),
+                    ('Joao Lima', 'joao@email.com', '48999995555', '56789012345', 'lead', 2100.00, 'INSS'),
+                    ('Carlos Souza', 'carlos@email.com', '48999996666', '67890123456', 'contratado', 2800.00, 'CLT'),
+                    ('Francisca Dias', 'francisca@email.com', '48999997777', '78901234567', 'lead', 1900.00, 'INSS'),
+                    ('Marcos Rodrigues', 'marcos@email.com', '48999998888', '89012345678', 'qualificado', 3100.00, 'INSS'),
+                    ('Juliana Ferreira', 'juliana@email.com', '48999999999', '90123456789', 'proposta', 2200.00, 'INSS'),
+                    ('Ricardo Almeida', 'ricardo@email.com', '48998887777', '01234567890', 'negociacao', 2600.00, 'CLT'),
+                    ('Fernanda Costa', 'fernanda@email.com', '48998886666', '11223344556', 'lead', 1700.00, 'INSS'),
+                    ('Bruno Martins', 'bruno@email.com', '48887776655', '22334455667', 'qualificado', 3300.00, 'INSS'),
+                    ('Carla Ribeiro', 'carla@email.com', '48876655443', '33445566778', 'proposta', 2400.00, 'CLT'),
+                    ('Diego Souza', 'diego@email.com', '48865544332', '44556677889', 'lead', 2000.00, 'INSS'),
+                    ('Emily Batista', 'emily@email.com', '48854433221', '55667788990', 'negociacao', 2900.00, 'INSS'),
+                    ('Felipe Lima', 'felipe@email.com', '48843322110', '66778899001', 'lead', 1850.00, 'CLT'),
+                    ('Gabriela Santos', 'gabriela@email.com', '48832211099', '77889900112', 'qualificado', 2700.00, 'INSS'),
+                    ('Henrique Alves', 'henrique@email.com', '48821099888', '88990011223', 'proposta', 2300.00, 'CLT'),
+                    ('Isabela Castro', 'isabela@email.com', '48810988777', '99001122334', 'lead', 1600.00, 'INSS'),
+                    ('Joaquim Mendes', 'joaquim@email.com', '48809877666', '00112233445', 'negociacao', 3400.00, 'INSS'),
+                ]
                 
-                return jsonify({'sucesso': True, 'mensagem': 'Dados de teste criados!'})
+                for nome, email, phone, cpf, status, margem, banco in clientes:
+                    cursor.execute("""
+                        INSERT INTO clientes (nome, email, phone, cpf, status, margem_consignavel, banco_atual)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (nome, email, phone, cpf, status, margem, banco))
+                
+                return jsonify({'sucesso': True, 'mensagem': 'Dados de teste criados!', 'clientes': len(clientes), 'campanhas': len(campanhas)})
             else:
-                return jsonify({'sucesso': True, 'mensagem': 'Dados já existem!'})
+                return jsonify({'sucesso': True, 'mensagem': 'Dados ja existem!'})
                 
     except Exception as e:
         logger.error(f"Erro ao criar seed: {e}")

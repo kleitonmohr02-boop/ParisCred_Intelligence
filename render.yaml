@@ -26,3 +26,5 @@ services:
         value: ParisCred_01
       - key: LOG_LEVEL
         value: INFO
+      - key: GEMINI_API_KEY
+        value: AIzaSyBF6VBbFIYA2VDHkC@mC3NK8NFr68uJY20
