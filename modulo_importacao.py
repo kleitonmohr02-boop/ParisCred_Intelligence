@@ -410,14 +410,25 @@ def criar_rotas_importacao(app):
         with db.get_connection() as conn:
             cursor = conn.cursor()
             
-            cursor.execute("SELECT COUNT(*) FROM beneficiarios")
-            total = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) as total FROM beneficiarios")
+            row = cursor.fetchone()
+            total = row['total'] if isinstance(row, dict) else row[0]
             
-            cursor.execute("SELECT status, COUNT(*) FROM beneficiarios GROUP BY status")
-            por_status = {row[0]: row[1] for row in cursor.fetchall()}
+            cursor.execute("SELECT status, COUNT(*) as total FROM beneficiarios GROUP BY status")
+            por_status = {}
+            for row in cursor.fetchall():
+                r = dict(row) if hasattr(row, 'keys') else row
+                status_val = r.get('status', r[0]) if isinstance(r, dict) else r[0]
+                count_val = r.get('total', r[1]) if isinstance(r, dict) else r[1]
+                por_status[status_val] = count_val
             
-            cursor.execute("SELECT banco, COUNT(*) FROM beneficiarios WHERE banco IS NOT NULL GROUP BY banco ORDER BY COUNT(*) DESC LIMIT 10")
-            por_banco = {row[0]: row[1] for row in cursor.fetchall()}
+            cursor.execute("SELECT banco, COUNT(*) as total FROM beneficiarios WHERE banco IS NOT NULL GROUP BY banco ORDER BY COUNT(*) DESC LIMIT 10")
+            por_banco = {}
+            for row in cursor.fetchall():
+                r = dict(row) if hasattr(row, 'keys') else row
+                banco_val = r.get('banco', r[0]) if isinstance(r, dict) else r[0]
+                count_val = r.get('total', r[1]) if isinstance(r, dict) else r[1]
+                por_banco[banco_val] = count_val
             
             return jsonify({
                 'total': total,

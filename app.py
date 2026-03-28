@@ -1,264 +1,112 @@
 """
-ParisCred Intelligence - Sistema SaaS Completo
+ParisCred Intelligence - Sistema SaaS com SQLite
 Aplicação Full-Stack com Autenticação, Painel ADM e Gerenciamento
+Versão 2.0 - Com segurança, validação e Evolution API integrada
 """
 
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
-from flask_cors import CORS
-from functools import wraps
-import requests
-import json
-from datetime import datetime
-import secrets
 import os
 import logging
+from logging.handlers import RotatingFileHandler
+from functools import wraps
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import requests
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask_cors import CORS
+from datetime import datetime
+import secrets
+import threading
+import time
 
+# Importar funções do database
+from database import (
+    Database,
+    UsuariosDB,
+    CampanhasDB,
+    HistoricoDB
+)
+
+# Importar validadores
+from validators import (
+    UsuarioLogin,
+    UsuarioCreate,
+    CampanhaCreate,
+    UsuarioUpdate,
+    Beneficiario,
+    Botao
+)
+
+# Importar skills e rotas customizadas
+try:
+    from skill_crm import ClientesDB
+    from skill_financeiro import FinanceiroDB
+    from skill_whatsapp import WhatsAppDB
+    from skill_admin import AdminReportsDB
+    SKILLS_ENABLED = True
+except ImportError:
+    SKILLS_ENABLED = False
+
+# ============================================================
+# CONFIGURAÇÃO INICIAL
+# ============================================================
+
+# Carregar variáveis de ambiente
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
-CORS(app)
 
-EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://localhost:8080")
-EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "CONSIGNADO123")
-EVOLUTION_HEADERS = {
-    "Content-Type": "application/json",
-    "apikey": EVOLUTION_API_KEY
-}
+# Security: Secret key do .env ou gerar uma nova
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 
-try:
-    from database import Database, UsuariosDB, CampanhasDB, HistoricoDB
-    logger.info("[OK] Banco de dados integrado")
-    USANDO_BANCO = True
-except Exception as e:
-    logger.error(f"[ERRO] Banco de dados NAO importado: {e}")
-    USANDO_BANCO = False
+# Security: Configuração de CORS específica
+ALLOWED_ORIGINS = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://localhost:3000').split(',')
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
 
-USUARIOS = {
-    'admin@pariscred.com': {
-        'senha': 'Admin@2025',
-        'nome': 'Administrador ParisCred',
-        'role': 'admin',
-        'criado_em': '2025-01-01',
-        'ativo': True
-    },
-    'vendedor1@pariscred.com': {
-        'senha': 'Vendedor@123',
-        'nome': 'João Vendedor',
-        'role': 'vendedor',
-        'criado_em': '2025-01-15',
-        'ativo': True
-    }
-}
+# Logging estruturado
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_FILE = os.getenv('LOG_FILE', 'logs/pariscred.log')
 
-# Campanhas criadas
-CAMPANHAS = {
-    'camp001': {
-        'id': 'camp001',
-        'nome': 'Campanha Inicial',
-        'descricao': 'Primeira campanha de teste',
-        'status': 'rascunho',
-        'criador': 'admin@pariscred.com',
-        'beneficiarios': [
-            {'numero': '5548991105801', 'nome': 'Kleiton'},
-            {'numero': '5548996057792', 'nome': 'Kleber Mohr'}
-        ],
-        'mensagem': 'Olá! Você tem uma ótima notícia!',
-        'botoes': [
-            {'id': '1', 'text': '💸 Ver meu Troco (Port)'},
-            {'id': '2', 'text': '💰 Dinheiro Novo'}
-        ],
-        'instancias': ['Paris_01', 'Chip01', 'Chip02'],
-        'criado_em': '2025-03-17',
-        'disparado_em': None,
-        'total_enviados': 0
-    }
-}
+# Criar diretório de logs se não existir
+os.makedirs('logs', exist_ok=True)
 
-# Histórico de disparos
-HISTORICO = []
-
-# WhatsApp Instâncias (conectadas)
-WHATSAPP_INSTANCIAS = {
-    'Paris_01': {
-        'nome': 'Paris_01',
-        'numero': '+5548991105801',
-        'status': 'desconectado',
-        'conectado_em': None,
-        'respondendo': False
-    },
-    'Chip01': {
-        'nome': 'Chip01',
-        'numero': '+5548996057792',
-        'status': 'desconectado',
-        'conectado_em': None,
-        'respondendo': False
-    },
-    'Chip02': {
-        'nome': 'Chip02',
-        'numero': None,
-        'status': 'desconectado',
-        'conectado_em': None,
-        'respondendo': False
-    }
-}
-
-# Leads qualificados (chegam de agente virtual)
-LEADS = {
-    'lead001': {
-        'id': 'lead001',
-        'numero': '5548991234567',
-        'nome': 'Cliente Premium',
-        'mensagem': 'Olá! Gostaria de saber mais sobre o Troco.',
-        'timestamp': '2025-03-17T10:30:00',
-        'status': 'pendente',  # pendente, atendido, resolvido
-        'atendido_por': None,
-        'campanha': 'camp001',
-        'qualificacao': 'alta'
-    },
-    'lead002': {
-        'id': 'lead002',
-        'numero': '5548991654321',
-        'nome': 'Prospect Novo',
-        'mensagem': 'Tenho interesse no Dinheiro Novo',
-        'timestamp': '2025-03-17T11:45:00',
-        'status': 'pendente',
-        'atendido_por': None,
-        'campanha': 'camp001',
-        'qualificacao': 'media'
-    },
-    'lead003': {
-        'id': 'lead003',
-        'numero': '5548999876543',
-        'nome': 'Cliente Recorrente',
-        'mensagem': 'Qual o prazo para aprovação?',
-        'timestamp': '2025-03-17T12:15:00',
-        'status': 'atendido',
-        'atendido_por': 'vendedor1@pariscred.com',
-        'campanha': 'camp001',
-        'qualificacao': 'alta'
-    }
-}
-
-# Conversa com leads (histórico de mensagens)
-CONVERSAS_LEADS = {
-    'lead001': [],
-    'lead002': [],
-    'lead003': [
-        {
-            'direção': 'entrada',
-            'mensagem': 'Qual o prazo para aprovação?',
-            'timestamp': '2025-03-17T12:15:00'
-        },
-        {
-            'direção': 'saída',
-            'mensagem': 'Olá! O prazo é de 2 a 3 dias úteis. Posso ajudá-lo?',
-            'timestamp': '2025-03-17T12:16:00',
-            'vendedor': 'vendedor1@pariscred.com'
-        }
+# Configurar logging
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5),
+        logging.StreamHandler()
     ]
-}
+)
+logger = logging.getLogger(__name__)
 
-# ============================================================
-# HELPER FUNCTIONS - EVOLUTION API
-# ============================================================
+# Inicializar banco de dados
+db = Database("app.db")
 
-def evolution_criar_instancia(nome_instancia):
-    """Criar nova instância WhatsApp na Evolution API"""
+# Registrar rotas de skills (se disponíveis)
+if SKILLS_ENABLED:
     try:
-        url = f"{EVOLUTION_API_URL}/instance/create"
-        payload = {"instanceName": nome_instancia}
-        
-        response = requests.post(url, json=payload, headers=EVOLUTION_HEADERS, timeout=10)
-        return response.json() if response.status_code == 200 else None
-    except Exception as e:
-        print(f"❌ Erro ao criar instância Evolution: {e}")
-        return None
+        from skills_routes import registrar_rotas_skills
+        registrar_rotas_skills(app)
+    except ImportError:
+        pass
 
-def evolution_listar_instancias():
-    """Listar todas as instâncias da Evolution API"""
-    try:
-        url = f"{EVOLUTION_API_URL}/instance/fetchInstances"
-        response = requests.get(url, headers=EVOLUTION_HEADERS, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            instancias = data.get('value', [])
-            
-            # Garantir que instancias é uma lista
-            if not isinstance(instancias, list):
-                instancias = [instancias] if instancias else []
-            
-            # Converter para formato padrão
-            resultado = []
-            for inst in instancias:
-                # Verificar se é um dict e não uma lista
-                if isinstance(inst, dict):
-                    resultado.append({
-                        'instance': {
-                            'instanceName': inst.get('name', 'N/A'),
-                            'instanceStatus': 'open' if inst.get('connectionStatus') == 'open' else 'close'
-                        },
-                        'contact': {
-                            'id': inst.get('number') or 'não conectado'
-                        }
-                    })
-            return resultado
-        return []
-    except Exception as e:
-        print(f"❌ Erro ao listar instâncias Evolution: {e}")
-        return []
+# Registrar rotas de importação de beneficiários
+try:
+    from modulo_importacao import criar_rotas_importacao
+    criar_rotas_importacao(app)
+except ImportError as e:
+    logger.warning(f"Módulo importação não disponível: {e}")
 
-def evolution_obter_qrcode(nome_instancia):
-    """Obter QR Code da instância"""
-    try:
-        # Endpoint correto da Evolution API para obter QR Code
-        url = f"{EVOLUTION_API_URL}/instance/qrcode/{nome_instancia}"
-        response = requests.get(url, headers=EVOLUTION_HEADERS, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Retorna o QR Code em base64 ou URL
-            return data.get('qrcode') or data.get('base64') or data.get('imageUrl')
-        return None
-    except Exception as e:
-        print(f"❌ Erro ao obter QR Code: {e}")
-        return None
+# Registrar rotas anti-ban
+try:
+    from modulo_antiban import criar_rotas_antiban
+    criar_rotas_antiban(app)
+except ImportError as e:
+    logger.warning(f"Módulo anti-ban não disponível: {e}")
 
-def evolution_conectar_instancia(nome_instancia):
-    """Conectar instância para obter QR Code"""
-    try:
-        # Endpoint para conectar e gerar QR Code
-        url = f"{EVOLUTION_API_URL}/instance/connect"
-        payload = {"instanceName": nome_instancia}
-        
-        response = requests.post(url, json=payload, headers=EVOLUTION_HEADERS, timeout=10)
-        
-        if response.status_code in [200, 201]:
-            return response.json()
-        
-        # Se falhar, tenta apenas obter QR Code
-        qr = evolution_obter_qrcode(nome_instancia)
-        return {'qrcode': qr} if qr else None
-    except Exception as e:
-        print(f"❌ Erro ao conectar instância: {e}")
-        return None
-
-def evolution_desconectar_instancia(nome_instancia):
-    """Desconectar instância"""
-    try:
-        url = f"{EVOLUTION_API_URL}/instance/logout"
-        payload = {"instanceName": nome_instancia}
-        
-        response = requests.post(url, json=payload, headers=EVOLUTION_HEADERS, timeout=10)
-        return response.status_code in [200, 201]
-    except Exception as e:
-        print(f"❌ Erro ao desconectar instância: {e}")
-        return False
+# Controle de disparos em segundo plano
+DISPAROS_ATIVOS = {}
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -273,6 +121,7 @@ def requer_login(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
 def requer_admin(f):
     """Decorator para proteger rotas ADM"""
     @wraps(f)
@@ -280,49 +129,144 @@ def requer_admin(f):
         if 'usuario' not in session:
             return redirect(url_for('login'))
         
-        usuario = USUARIOS.get(session['usuario'])
+        usuario = UsuariosDB.obter(session['usuario'])
         if not usuario or usuario['role'] != 'admin':
+            logger.warning(f"Acesso negado para {session['usuario']} em {request.path}")
             return jsonify({'erro': 'Acesso negado'}), 403
         
         return f(*args, **kwargs)
     return decorated_function
 
-def requer_admin_api(f):
-    """Decorator para proteger APIs de administrador (retorna JSON)"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'usuario' not in session:
-            return jsonify({'erro': 'Não autenticado'}), 401
-        
-        usuario = USUARIOS.get(session['usuario'])
-        if not usuario or usuario['role'] != 'admin':
-            return jsonify({'erro': 'Acesso negado'}), 403
-        
-        return f(*args, **kwargs)
-    return decorated_function
 
 def obter_usuario_atual():
     """Retorna dados do usuário logado"""
     if 'usuario' not in session:
         return None
+    return UsuariosDB.obter(session['usuario'])
+
+
+def usuario_para_json(usuario):
+    """Converte objeto usuário para JSON, removendo dados sensíveis"""
+    if not usuario:
+        return None
     
-    email = session['usuario']
+    return {
+        'email': usuario['email'],
+        'nome': usuario['nome'],
+        'role': usuario['role'],
+        'criado_em': usuario['criado_em'],
+        'ativo': usuario['ativo']
+    }
+
+
+def campanha_para_json(campanha):
+    """Converte campanha para JSON"""
+    if not campanha:
+        return None
     
-    if USANDO_BANCO:
-        try:
-            usuario = UsuariosDB.obter(email)
-            if usuario:
-                return {
-                    'email': usuario['email'],
-                    'nome': usuario['nome'],
-                    'role': usuario['role'],
-                    'criado_em': usuario['criado_em'],
-                    'ativo': usuario['ativo']
-                }
-        except Exception as e:
-            logger.error(f"[USUARIO] Erro ao buscar do banco: {e}")
+    return {
+        'id': campanha['id'],
+        'nome': campanha['nome'],
+        'descricao': campanha['descricao'],
+        'status': campanha['status'],
+        'criador': campanha['criador'],
+        'beneficiarios': campanha['beneficiarios_json'],
+        'mensagem': campanha['mensagem'],
+        'botoes': campanha['botoes_json'],
+        'instancias': campanha['instancias_json'],
+        'criado_em': campanha['criado_em'],
+        'disparado_em': campanha['disparado_em'],
+        'total_enviados': campanha['total_enviados']
+    }
+
+
+def enviar_whatsapp_evolution(numero, mensagem, botoes=None, instance_name=None):
+    """
+    Envia mensagem via Evolution API
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
+    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
+    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01')
     
-    return USUARIOS.get(email)
+    url = f"{api_url}/message/sendText/{instance}"
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'apikey': api_key
+    }
+    
+    payload = {
+        'number': numero,
+        'text': mensagem
+    }
+    
+    if botoes:
+        payload['buttons'] = [
+            {'id': b['id'], 'text': b['text']} for b in botoes
+        ]
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            logger.info(f"Mensagem enviada para {numero}")
+            return {'status': 'enviado', 'response': response.json()}
+        else:
+            logger.error(f"Erro ao enviar para {numero}: {response.text}")
+            return {'status': 'erro', 'message': response.text}
+            
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout ao enviar para {numero}")
+        return {'status': 'timeout', 'message': 'Tempo limite excedido'}
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem: {str(e)}")
+        return {'status': 'erro', 'message': str(e)}
+
+
+def checar_instancia_evolution(instance_name=None):
+    """
+    Verifica status da instância WhatsApp
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
+    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
+    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'ParisCred_01')
+    
+    url = f"{api_url}/instance/connectionState/{instance}"
+    
+    headers = {'apikey': api_key}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            state = data.get('instance', {}).get('state', 'unknown')
+            return {
+                'status': 'ok',
+                'instance': instance,
+                'state': state,
+                'conectado': state == 'open'
+            }
+        else:
+            # Tentar listar instâncias
+            list_url = f"{api_url}/instance/fetchInstances"
+            list_resp = requests.get(list_url, headers=headers, timeout=10)
+            if list_resp.status_code == 200:
+                insts = list_resp.json()
+                for i in insts:
+                    if i.get('name') == instance:
+                        return {
+                            'status': 'ok',
+                            'instance': instance,
+                            'state': i.get('connectionStatus', 'unknown'),
+                            'conectado': i.get('connectionStatus') == 'open'
+                        }
+            return {'status': 'erro', 'message': f'Status: {response.status_code}'}
+            
+    except Exception as e:
+        logger.error(f"Erro ao verificar instância: {str(e)}")
+        return {'status': 'erro', 'message': str(e)}
+
 
 # ============================================================
 # ROTAS PÚBLICAS (Auth)
@@ -335,39 +279,44 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Página de login"""
     if request.method == 'POST':
-        email = request.form.get('email', '').lower()
-        senha = request.form.get('senha', '')
+        try:
+            # Validar input
+            data = UsuarioLogin(
+                email=request.form.get('email', ''),
+                senha=request.form.get('senha', '')
+            )
+            
+            # Verificar credenciais
+            if UsuariosDB.verificar_senha(data.email, data.senha):
+                usuario = UsuariosDB.obter(data.email)
+                if usuario and usuario['ativo']:
+                    session['usuario'] = data.email
+                    logger.info(f"Login bem-sucedido: {data.email}")
+                    return redirect(url_for('dashboard'))
+            
+            logger.warning(f"Login falhou para: {data.email}")
+            return render_template('login.html', erro='Email ou senha incorretos')
         
-        if USANDO_BANCO:
-            try:
-                if UsuariosDB.verificar_senha(email, senha):
-                    usuario = UsuariosDB.obter(email)
-                    if usuario and usuario.get('ativo'):
-                        session['usuario'] = email
-                        logger.info(f"[LOGIN] Usuario {email} logado com sucesso (BD)")
-                        return redirect(url_for('dashboard'))
-            except Exception as e:
-                logger.error(f"[LOGIN] Erro ao verificar usuario no banco: {e}")
-        
-        usuario = USUARIOS.get(email)
-        if usuario and usuario['senha'] == senha and usuario['ativo']:
-            session['usuario'] = email
-            logger.info(f"[LOGIN] Usuario {email} logado (modo demonstração)")
-            return redirect(url_for('dashboard'))
-        
-        return render_template('login.html', erro='Email ou senha incorretos')
+        except Exception as e:
+            logger.error(f"Erro no login: {str(e)}")
+            return render_template('login.html', erro='Erro ao processar login')
     
     return render_template('login.html')
+
 
 @app.route('/logout')
 def logout():
     """Faz logout do usuário"""
+    email = session.get('usuario', 'desconhecido')
     session.clear()
+    logger.info(f"Logout: {email}")
     return redirect(url_for('login'))
+
 
 # ============================================================
 # ROTAS PROTEGIDAS - DASHBOARD
@@ -378,19 +327,17 @@ def logout():
 def dashboard():
     """Dashboard principal do usuário"""
     usuario = obter_usuario_atual()
-    return render_template('dashboard.html', usuario=usuario)
+    logger.info(f"Acesso dashboard: {usuario['email']}")
+    return render_template('dashboard.html', usuario=usuario_para_json(usuario))
+
 
 @app.route('/api/usuario')
 @requer_login
 def api_usuario():
     """Retorna dados do usuário logado"""
     usuario = obter_usuario_atual()
-    return jsonify({
-        'email': session['usuario'],
-        'nome': usuario['nome'],
-        'role': usuario['role'],
-        'criado_em': usuario['criado_em']
-    })
+    return jsonify(usuario_para_json(usuario))
+
 
 @app.route('/api/stats')
 @requer_login
@@ -398,43 +345,25 @@ def api_stats():
     """Retorna estatísticas do usuário/sistema"""
     usuario = obter_usuario_atual()
     
-    if USANDO_BANCO:
-        try:
-            if usuario['role'] == 'admin':
-                usuarios = UsuariosDB.listar_todos()
-                campanhas = CampanhasDB.listar_todas()
-                return jsonify({
-                    'total_usuarios': len(usuarios),
-                    'total_campanhas': len(campanhas),
-                    'total_disparos': 0,
-                    'usuarios_ativos': sum(1 for u in usuarios if u.get('ativo', True)),
-                    'campanhas_ativas': sum(1 for c in campanhas if c.get('status') == 'ativo')
-                })
-            else:
-                campanhas = CampanhasDB.listar_por_criador(session['usuario'])
-                return jsonify({
-                    'total_campanhas': len(campanhas),
-                    'total_disparos': sum(c.get('total_enviados', 0) for c in campanhas),
-                    'campanhas_ativas': sum(1 for c in campanhas if c.get('status') == 'ativo')
-                })
-        except Exception as e:
-            logger.error(f"[STATS] Erro ao buscar stats: {e}")
-    
     if usuario['role'] == 'admin':
+        usuarios = UsuariosDB.listar_todos()
+        campanhas = CampanhasDB.listar_todas()
+        
         return jsonify({
-            'total_usuarios': len(USUARIOS),
-            'total_campanhas': len(CAMPANHAS),
-            'total_disparos': len(HISTORICO),
-            'usuarios_ativos': sum(1 for u in USUARIOS.values() if u['ativo']),
-            'campanhas_ativas': sum(1 for c in CAMPANHAS.values() if c['status'] == 'ativo')
+            'total_usuarios': len(usuarios),
+            'total_campanhas': len(campanhas),
+            'total_disparos': sum(c['total_enviados'] for c in campanhas),
+            'usuarios_ativos': len(usuarios),
+            'campanhas_ativas': sum(1 for c in campanhas if c['status'] == 'disparado')
         })
     else:
-        campanhas_users = [c for c in CAMPANHAS.values() if c['criador'] == session['usuario']]
+        campanhas_users = CampanhasDB.listar_por_criador(session['usuario'])
         return jsonify({
             'total_campanhas': len(campanhas_users),
             'total_disparos': sum(c['total_enviados'] for c in campanhas_users),
-            'campanhas_ativas': sum(1 for c in campanhas_users if c['status'] == 'ativo')
+            'campanhas_ativas': sum(1 for c in campanhas_users if c['status'] == 'disparado')
         })
+
 
 # ============================================================
 # ROTAS DE CAMPANHAS
@@ -445,7 +374,224 @@ def api_stats():
 def campanhas():
     """Página de gerenciamento de campanhas"""
     usuario = obter_usuario_atual()
-    return render_template('campanhas.html', usuario=usuario)
+    return render_template('campanhas.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/crm')
+@requer_login
+def crm():
+    """Página de CRM - Gestão de Clientes"""
+    usuario = obter_usuario_atual()
+    return render_template('crm.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/api/crm/update_status', methods=['POST'])
+@requer_login
+def api_crm_update_status():
+    """Atualiza o status do lead para Kanban"""
+    STATUS_KANBAN = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado']
+    
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'erro': 'Dados JSON não fornecidos'}), 400
+    
+    lead_id = data.get('lead_id')
+    novo_status = data.get('status')
+    
+    if not lead_id:
+        return jsonify({'erro': 'ID do lead não fornecido'}), 400
+    
+    if not novo_status:
+        return jsonify({'erro': 'Status não fornecido'}), 400
+    
+    if novo_status not in STATUS_KANBAN:
+        return jsonify({'erro': f'Status inválido. Valores permitidos: {STATUS_KANBAN}'}), 400
+    
+    try:
+        db = Database()
+        p = db.placeholder()
+        ativo_val = db.bool_def(True)
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(f"SELECT id FROM clientes WHERE id = {p} AND ativo = {ativo_val}", (lead_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return jsonify({'erro': 'Lead não encontrado'}), 404
+            
+            cursor.execute(f"UPDATE clientes SET status = {p} WHERE id = {p} AND ativo = {ativo_val}", (novo_status, lead_id))
+            conn.commit()
+        
+        logger.info(f"Lead {lead_id} atualizado para status: {novo_status}")
+        return jsonify({'success': True, 'status': novo_status})
+        
+    except Exception as e:
+        logger.error(f"Erro ao atualizar status do lead: {str(e)}")
+        return jsonify({'erro': f'Erro ao atualizar status: {str(e)}'}), 500
+
+
+@app.route('/api/crm/leads', methods=['GET'])
+@requer_login
+def api_crm_leads():
+    """Retorna todos os leads com seus status para Kanban"""
+    STATUS_KANBAN = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado']
+    
+    try:
+        db = Database()
+        p = db.placeholder()
+        ativo_val = db.bool_def(True)
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT * FROM clientes WHERE ativo = {ativo_val} ORDER BY data_criacao DESC")
+            
+            leads = []
+            for row in cursor.fetchall():
+                lead = dict(row) if hasattr(row, 'keys') else None
+                if lead:
+                    leads.append({
+                        'id': lead.get('id'),
+                        'nome': lead.get('nome'),
+                        'phone': lead.get('phone'),
+                        'email': lead.get('email'),
+                        'status': lead.get('status'),
+                        'margem_consignavel': lead.get('margem_consignavel'),
+                        'data_criacao': lead.get('data_criacao')
+                    })
+        
+        return jsonify({'success': True, 'leads': leads, 'statuses': STATUS_KANBAN})
+        
+    except Exception as e:
+        logger.error(f"Erro ao listar leads: {str(e)}")
+        return jsonify({'erro': f'Erro ao listar leads: {str(e)}'}), 500
+
+
+@app.route('/financeiro')
+@requer_login
+def financeiro():
+    """Página do Sistema Financeiro"""
+    usuario = obter_usuario_atual()
+    return render_template('financeiro.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/importar')
+@requer_login
+def pagina_importar():
+    """Página de Importar Leads"""
+    usuario = obter_usuario_atual()
+    return render_template('importar.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/coach')
+@requer_login
+def pagina_coach():
+    """Página do Chat IA Coach"""
+    usuario = obter_usuario_atual()
+    return render_template('coach.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/extrato')
+@requer_login
+def pagina_extrato():
+    """Página de Análise de Extrato"""
+    usuario = obter_usuario_atual()
+    return render_template('extrato.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/api/extrato/analisar', methods=['POST'])
+@requer_login
+def api_analisar_extrato():
+    """API para analisar extrato PDF"""
+    from modulo_ia import agente_ia, ia_fallback
+    
+    if 'file' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
+    
+    arquivo = request.files['file']
+    
+    if not arquivo.filename.endswith('.pdf'):
+        return jsonify({'erro': 'Arquivo deve ser PDF'}), 400
+    
+    try:
+        # Ler PDF
+        import PyPDF2
+        import tempfile
+        
+        temp_path = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        arquivo.save(temp_path.name)
+        
+        with open(temp_path.name, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            texto = ""
+            for page in reader.pages:
+                texto += page.extract_text() or ""
+        
+        # Limitar texto se muito grande
+        if len(texto) > 8000:
+            texto = texto[:8000] + "..."
+        
+        # Enviar para IA
+        prompt = f"""Analise este extrato de crédito consignado e identifique:
+
+1. Todos os contratos ativos (banco, parcela, prazo, valor total)
+2. Valor total de desconto mensal
+3. Oportunidades de portabilidade (se há contratos com taxas altas)
+4. Contratos que vão liberar em breve (próximos a quitar)
+5. Sugestão de economia
+6. Score do cliente (0-100 baseado na situação)
+
+Extrato:
+{texto}
+
+Responda em português brasileiro, de forma clara e objetiva."""
+
+        try:
+            resposta = agente_ia.gerar_resposta(prompt, {'nome': 'Cliente'})
+            if resposta:
+                return jsonify({'sucesso': True, 'analise': resposta})
+        except Exception as e:
+            logger.warning(f"Erro Gemini: {e}")
+        
+        # Fallback
+        return jsonify({
+            'sucesso': True, 
+            'analise': 'Analise do extrato:\n\n• Contratos encontrados: Verificar manualmente\n• Total desconto: Verificar extrato\n• Recomendação: Entre em contato para análise detalhada'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro ao analisar extrato: {e}")
+        return jsonify({'erro': f'Erro ao processar PDF: {str(e)}'}), 500
+
+
+@app.route('/api/coach/chat', methods=['POST'])
+@requer_login
+def api_coach_chat():
+    """API para Chat com IA Coach"""
+    from modulo_ia import agente_ia, ia_fallback
+    
+    data = request.get_json()
+    mensagem = data.get('mensagem', '')
+    
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem vazia'}), 400
+    
+    usuario = obter_usuario_atual()
+    
+    # Tentar usar IA
+    try:
+        resposta = agente_ia.gerar_resposta(mensagem, {'nome': usuario.get('nome', 'Vendedor')})
+        if resposta:
+            return jsonify({'resposta': resposta})
+    except Exception as e:
+        logger.warning(f"Erro no Gemini: {e}")
+    
+    # Fallback
+    resposta_fallback = ia_fallback.responder(mensagem)
+    return jsonify({'resposta': resposta_fallback})
+
 
 @app.route('/api/campanhas', methods=['GET', 'POST'])
 @requer_login
@@ -454,192 +600,255 @@ def api_campanhas():
     usuario = obter_usuario_atual()
     
     if request.method == 'GET':
-        lista = []
+        # Listar campanhas
+        if usuario['role'] == 'admin':
+            lista = CampanhasDB.listar_todas()
+        else:
+            lista = CampanhasDB.listar_por_criador(session['usuario'])
         
-        if USANDO_BANCO:
-            try:
-                if usuario['role'] == 'admin':
-                    campanhas = CampanhasDB.listar_todas()
-                else:
-                    campanhas = CampanhasDB.listar_por_criador(session['usuario'])
-                
-                for c in campanhas:
-                    lista.append({
-                        'id': c['id'],
-                        'nome': c['nome'],
-                        'descricao': c['descricao'],
-                        'status': c['status'],
-                        'criador': c['criador'],
-                        'beneficiarios': c.get('beneficiarios_json', []),
-                        'mensagem': c['mensagem'],
-                        'botoes': c.get('botoes_json', []),
-                        'instancias': c.get('instancias_json', []),
-                        'criado_em': c['criado_em'],
-                        'disparado_em': c.get('disparado_em'),
-                        'total_enviados': c.get('total_enviados', 0)
-                    })
-            except Exception as e:
-                logger.error(f"[CAMPANHAS] Erro ao buscar do banco: {e}")
-        
-        if not lista:
-            if usuario['role'] == 'admin':
-                lista = list(CAMPANHAS.values())
-            else:
-                lista = [c for c in CAMPANHAS.values() if c['criador'] == session['usuario']]
-        
-        return jsonify(lista)
+        return jsonify([campanha_para_json(c) for c in lista])
     
     elif request.method == 'POST':
-        data = request.json
-        
-        if USANDO_BANCO:
-            try:
-                camp_id = CampanhasDB.criar(
-                    nome=data.get('nome', 'Nova Campanha'),
-                    descricao=data.get('descricao', ''),
-                    criador=session['usuario'],
-                    mensagem=data.get('mensagem', ''),
-                    beneficiarios=data.get('beneficiarios', []),
-                    botoes=data.get('botoes', []),
-                    instancias=data.get('instancias', ['Paris_01'])
-                )
-                
-                campanha = CampanhasDB.obter(camp_id)
-                logger.info(f"[CAMPANHA] Criada via BD: {camp_id}")
-                
+        try:
+            # Validar input
+            data = request.json
+            campanha_validada = CampanhaCreate(
+                nome=data.get('nome', 'Nova Campanha'),
+                descricao=data.get('descricao', ''),
+                mensagem=data.get('mensagem', ''),
+                beneficiarios=data.get('beneficiarios', []),
+                botoes=data.get('botoes', []),
+                instancias=data.get('instancias', ['Paris_01'])
+            )
+            
+            # Criar nova campanha
+            campanha_id = CampanhasDB.criar(
+                nome=campanha_validada.nome,
+                descricao=campanha_validada.descricao,
+                criador=session['usuario'],
+                mensagem=campanha_validada.mensagem,
+                beneficiarios=[b.dict() for b in campanha_validada.beneficiarios],
+                botoes=[b.dict() for b in campanha_validada.botoes],
+                instancias=campanha_validada.instancias
+            )
+            
+            if campanha_id:
+                nova_campanha = CampanhasDB.obter(campanha_id)
+                logger.info(f"Campanha criada: {campanha_validada.nome} por {session['usuario']}")
                 return jsonify({
                     'sucesso': True,
-                    'mensagem': f'Campanha "{data.get("nome")}" criada com sucesso!',
-                    'campanha': {
-                        'id': camp_id,
-                        'nome': data.get('nome'),
-                        'status': 'rascunho',
-                        'criador': session['usuario']
-                    }
+                    'mensagem': f'Campanha "{nova_campanha["nome"]}" criada com sucesso!',
+                    'campanha': campanha_para_json(nova_campanha)
                 }), 201
-            except Exception as e:
-                logger.error(f"[CAMPANHA] Erro ao criar no banco: {e}")
-        
-        camp_id = f"camp{len(CAMPANHAS) + 1:03d}"
-        
-        nova_campanha = {
-            'id': camp_id,
-            'nome': data.get('nome', 'Nova Campanha'),
-            'descricao': data.get('descricao', ''),
-            'status': 'rascunho',
-            'criador': session['usuario'],
-            'beneficiarios': data.get('beneficiarios', []),
-            'mensagem': data.get('mensagem', ''),
-            'botoes': data.get('botoes', []),
-            'instancias': data.get('instancias', ['Paris_01']),
-            'criado_em': datetime.now().isoformat(),
-            'disparado_em': None,
-            'total_enviados': 0
-        }
-        
-        CAMPANHAS[camp_id] = nova_campanha
-        
-        return jsonify({
-            'sucesso': True,
-            'mensagem': f'Campanha "{nova_campanha["nome"]}" criada com sucesso!',
-            'campanha': nova_campanha
-        }), 201
+            else:
+                return jsonify({'erro': 'Erro ao criar campanha'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao criar campanha: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
 
-@app.route('/api/campanhas/<camp_id>', methods=['GET', 'PUT', 'DELETE'])
+
+@app.route('/api/campanhas/<int:camp_id>', methods=['GET', 'PUT', 'DELETE'])
 @requer_login
 def api_campanha_detalhes(camp_id):
     """API para detalhes de 1 campanha"""
     usuario = obter_usuario_atual()
     
-    campanha = CAMPANHAS.get(camp_id)
+    campanha = CampanhasDB.obter(camp_id)
     if not campanha:
         return jsonify({'erro': 'Campanha não encontrada'}), 404
     
     # Verificar permissão
     if usuario['role'] != 'admin' and campanha['criador'] != session['usuario']:
+        logger.warning(f"Acesso negado: {session['usuario']} tentou acessar campanha {camp_id}")
         return jsonify({'erro': 'Acesso negado'}), 403
     
     if request.method == 'GET':
-        return jsonify(campanha)
+        return jsonify(campanha_para_json(campanha))
     
     elif request.method == 'PUT':
-        # Atualizar campanha
-        data = request.json
-        campanha.update({
-            'nome': data.get('nome', campanha['nome']),
-            'descricao': data.get('descricao', campanha['descricao']),
-            'beneficiarios': data.get('beneficiarios', campanha['beneficiarios']),
-            'mensagem': data.get('mensagem', campanha['mensagem']),
-            'botoes': data.get('botoes', campanha['botoes']),
-            'instancias': data.get('instancias', campanha['instancias'])
-        })
-        
-        return jsonify({'sucesso': True, 'campanha': campanha})
+        try:
+            # Validar input
+            data = request.json
+            atualizar_dados = {}
+            
+            if 'nome' in data:
+                atualizar_dados['nome'] = data['nome'][:100]
+            if 'descricao' in data:
+                atualizar_dados['descricao'] = data['descricao'][:500]
+            if 'mensagem' in data:
+                atualizar_dados['mensagem'] = data['mensagem'][:4000]
+            if 'beneficiarios' in data:
+                atualizar_dados['beneficiarios_json'] = data['beneficiarios']
+            if 'botoes' in data:
+                atualizar_dados['botoes_json'] = data['botoes']
+            if 'instancias' in data:
+                atualizar_dados['instancias_json'] = data['instancias']
+            
+            if CampanhasDB.atualizar(camp_id, **atualizar_dados):
+                campanha_atualizada = CampanhasDB.obter(camp_id)
+                logger.info(f"Campanha atualizada: {camp_id}")
+                return jsonify({
+                    'sucesso': True,
+                    'campanha': campanha_para_json(campanha_atualizada)
+                })
+            else:
+                return jsonify({'erro': 'Erro ao atualizar campanha'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao atualizar campanha: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
     
     elif request.method == 'DELETE':
         # Deletar campanha
         if campanha['status'] != 'rascunho':
             return jsonify({'erro': 'Só é possível deletar campanhas em rascunho'}), 400
         
-        del CAMPANHAS[camp_id]
-        return jsonify({'sucesso': True, 'mensagem': 'Campanha deletada'})
+        if CampanhasDB.deletar(camp_id):
+            logger.info(f"Campanha deletada: {camp_id}")
+            return jsonify({'sucesso': True, 'mensagem': 'Campanha deletada'})
+        else:
+            return jsonify({'erro': 'Erro ao deletar campanha'}), 500
+
 
 # ============================================================
-# ROTAS DE DISPARO
+# ROTAS DE DISPARO (COM EVOLUTION API)
 # ============================================================
 
-@app.route('/api/campanhas/<camp_id>/disparar', methods=['POST'])
+@app.route('/api/campanhas/<int:camp_id>/disparar', methods=['POST'])
 @requer_login
-def disparar_campanha(camp_id):
-    """Dispara uma campanha"""
+def Disparar_campanha(camp_id):
+    """Inicia o disparo de uma campanha em segundo plano"""
     usuario = obter_usuario_atual()
     
-    campanha = CAMPANHAS.get(camp_id)
+    campanha = CampanhasDB.obter(camp_id)
     if not campanha:
         return jsonify({'erro': 'Campanha não encontrada'}), 404
     
     # Verificar permissão
     if usuario['role'] != 'admin' and campanha['criador'] != session['usuario']:
+        logger.warning(f"Acesso negado: {session['usuario']} tentou disparar campanha {camp_id}")
         return jsonify({'erro': 'Acesso negado'}), 403
     
-    if not campanha['beneficiarios']:
+    if not campanha['beneficiarios_json']:
         return jsonify({'erro': 'Nenhum beneficiário configurado'}), 400
     
-    # Simular disparo (em produção, conectaria com Evolution API)
+    # Se já estiver disparando
+    if camp_id in DISPAROS_ATIVOS and DISPAROS_ATIVOS[camp_id]['status'] == 'processando':
+        return jsonify({'erro': 'Esta campanha já está em processamento'}), 400
+    
+    # Iniciar thread de disparo
+    thread = threading.Thread(target=processar_disparo_background, args=(camp_id, session['usuario']))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'sucesso': True,
+        'mensagem': 'Disparo iniciado em segundo plano.',
+        'camp_id': camp_id
+    })
+
+def processar_disparo_background(camp_id, usuario_email):
+    """Função executada em segundo plano para enviar as mensagens"""
+    campanha = CampanhasDB.obter(camp_id)
+    if not campanha: return
+
+    total = len(campanha['beneficiarios_json'])
+    DISPAROS_ATIVOS[camp_id] = {
+        'status': 'processando',
+        'total': total,
+        'enviados': 0,
+        'erros': 0,
+        'inicio': datetime.now().isoformat()
+    }
+    
     resultados = []
+    delay = int(os.getenv('MESSAGE_DELAY', '5'))
+    instancia_nome = campanha['instancias_json'][0] if campanha['instancias_json'] else None
     
     try:
-        for idx, beneficiario in enumerate(campanha['beneficiarios']):
-            # Aqui entra a lógica real de envio via Evolution API
+        for idx, beneficiario in enumerate(campanha['beneficiarios_json']):
+            # Se campanha foi cancelada ou algo assim (futuro)
+            if camp_id not in DISPAROS_ATIVOS: break
+                
+            numero = beneficiario.get('numero', '')
+            nome = beneficiario.get('nome', 'N/A')
+            
+            if not numero:
+                DISPAROS_ATIVOS[camp_id]['erros'] += 1
+                continue
+            
+            # Delay entre envios (exceto o primeiro)
+            if idx > 0:
+                time.sleep(delay)
+            
+            # Simular digitação (Anti-Ban 2.0)
+            try:
+                from modulo_antiban import anti_ban
+                anti_ban.simular_digitacao(instancia_nome, numero)
+            except Exception:
+                pass
+            
+            # Enviar via Evolution API
+            resultado = enviar_whatsapp_evolution(
+                numero=numero,
+                mensagem=campanha['mensagem'],
+                botoes=campanha['botoes_json'],
+                instance_name=instancia_nome
+            )
+            
+            if resultado['status'] == 'enviado':
+                DISPAROS_ATIVOS[camp_id]['enviados'] += 1
+            else:
+                DISPAROS_ATIVOS[camp_id]['erros'] += 1
+                
             resultados.append({
-                'beneficiario': beneficiario['nome'],
-                'numero': beneficiario['numero'],
-                'status': 'enviado',
+                'beneficiario': nome,
+                'numero': numero,
+                'status': resultado['status'],
                 'timestamp': datetime.now().isoformat()
             })
         
-        # Atualizar campanha
-        campanha['status'] = 'disparado'
-        campanha['disparado_em'] = datetime.now().isoformat()
-        campanha['total_enviados'] = len(resultados)
+        # Finalizar
+        CampanhasDB.atualizar(
+            camp_id,
+            status='disparado',
+            disparado_em=datetime.now().isoformat(),
+            total_enviados=DISPAROS_ATIVOS[camp_id]['enviados']
+        )
         
-        # Registrar no histórico
-        HISTORICO.append({
-            'campanha_id': camp_id,
-            'usuario': session['usuario'],
-            'timestamp': datetime.now().isoformat(),
-            'total_beneficiarios': len(resultados),
-            'resultados': resultados
-        })
+        HistoricoDB.registrar(
+            campanha_id=camp_id,
+            usuario=usuario_email,
+            total_beneficiarios=len(resultados),
+            resultados={'enviados': resultados}
+        )
         
-        return jsonify({
-            'sucesso': True,
-            'mensagem': f'{len(resultados)} mensagens disparadas com sucesso!',
-            'resultados': resultados
-        })
-    
+        DISPAROS_ATIVOS[camp_id]['status'] = 'concluido'
+        DISPAROS_ATIVOS[camp_id]['fim'] = datetime.now().isoformat()
+        logger.info(f"Campanha {camp_id} finalizada em background")
+        
     except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+        logger.error(f"Erro no disparo background {camp_id}: {str(e)}")
+        if camp_id in DISPAROS_ATIVOS:
+            DISPAROS_ATIVOS[camp_id]['status'] = 'erro'
+            DISPAROS_ATIVOS[camp_id]['erro_msg'] = str(e)
+
+@app.route('/api/campanhas/progresso')
+@requer_login
+def api_campanhas_progresso():
+    """Retorna o progresso de todos os disparos ativos"""
+    return jsonify(DISPAROS_ATIVOS)
+
+
+@app.route('/api/whatsapp/status')
+@requer_login
+def whatsapp_status():
+    """Verifica status da instância WhatsApp"""
+    instancia = request.args.get('instance', os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01'))
+    status = checar_instancia_evolution(instancia)
+    return jsonify(status)
+
 
 # ============================================================
 # ROTAS ADMINISTRATIVAS
@@ -650,7 +859,9 @@ def disparar_campanha(camp_id):
 def admin():
     """Dashboard administrativo"""
     usuario = obter_usuario_atual()
-    return render_template('admin.html', usuario=usuario)
+    logger.info(f"Acesso admin: {usuario['email']}")
+    return render_template('admin.html', usuario=usuario_para_json(usuario))
+
 
 @app.route('/api/admin/usuarios', methods=['GET', 'POST'])
 @requer_admin
@@ -658,546 +869,149 @@ def api_admin_usuarios():
     """Gerenciar usuários (apenas ADM)"""
     
     if request.method == 'GET':
-        usuarios = []
-        
-        if USANDO_BANCO:
-            try:
-                for u in UsuariosDB.listar_todos():
-                    usuarios.append({
-                        'email': u['email'],
-                        'nome': u['nome'],
-                        'role': u['role'],
-                        'ativo': u['ativo'],
-                        'criado_em': u['criado_em']
-                    })
-            except Exception as e:
-                logger.error(f"[ADMIN USUARIOS] Erro ao buscar usuarios: {e}")
-        
-        if not usuarios:
-            for email, dados in USUARIOS.items():
-                usuarios.append({
-                    'email': email,
-                    'nome': dados['nome'],
-                    'role': dados['role'],
-                    'ativo': dados['ativo'],
-                    'criado_em': dados['criado_em']
-                })
-        
-        return jsonify(usuarios)
+        usuarios = UsuariosDB.listar_todos()
+        return jsonify([usuario_para_json(u) for u in usuarios])
     
     elif request.method == 'POST':
-        data = request.json
-        email = data.get('email', '').lower()
-        
-        if USANDO_BANCO:
-            try:
-                sucesso = UsuariosDB.criar(
-                    email=email,
-                    nome=data.get('nome', 'Novo Usuário'),
-                    senha=data.get('senha', 'Temp@123'),
-                    role=data.get('role', 'vendedor')
-                )
-                if sucesso:
-                    logger.info(f"[ADMIN] Usuario criado: {email}")
-                    return jsonify({
-                        'sucesso': True,
-                        'mensagem': f'Usuário {data.get("nome")} criado com sucesso!',
-                        'usuario': {'email': email, 'nome': data.get('nome'), 'role': data.get('role', 'vendedor')}
-                    }), 201
+        try:
+            # Validar input
+            data = request.json
+            usuario_valido = UsuarioCreate(
+                email=data.get('email', ''),
+                nome=data.get('nome', ''),
+                senha=data.get('senha', 'Temp@123'),
+                role=data.get('role', 'vendedor')
+            )
+            
+            # Verificar se já existe
+            if UsuariosDB.obter(usuario_valido.email):
+                return jsonify({'erro': 'Email já cadastrado'}), 400
+            
+            # Criar novo usuário
+            if UsuariosDB.criar(
+                email=usuario_valido.email,
+                nome=usuario_valido.nome,
+                senha=usuario_valido.senha,
+                role=usuario_valido.role
+            ):
+                usuario_criado = UsuariosDB.obter(usuario_valido.email)
+                logger.info(f"Usuário criado: {usuario_valido.email} por {session['usuario']}")
+                return jsonify({
+                    'sucesso': True,
+                    'mensagem': f'Usuário {usuario_valido.nome} criado com sucesso!',
+                    'usuario': usuario_para_json(usuario_criado)
+                }), 201
+            else:
                 return jsonify({'erro': 'Erro ao criar usuário'}), 500
-            except Exception as e:
-                logger.error(f"[ADMIN] Erro ao criar usuario: {e}")
-                return jsonify({'erro': str(e)}), 500
-        
-        if email in USUARIOS:
-            return jsonify({'erro': 'Email já cadastrado'}), 400
-        
-        USUARIOS[email] = {
-            'senha': data.get('senha', 'Temp@123'),
-            'nome': data.get('nome', 'Novo Usuário'),
-            'role': data.get('role', 'vendedor'),
-            'criado_em': datetime.now().isoformat(),
-            'ativo': True
-        }
-        
-        return jsonify({
-            'sucesso': True,
-            'mensagem': f'Usuário {data.get("nome")} criado com sucesso!',
-            'usuario': {
-                'email': email,
-                'nome': USUARIOS[email]['nome'],
-                'role': USUARIOS[email]['role']
-            }
-        }), 201
+                
+        except Exception as e:
+            logger.error(f"Erro ao criar usuário: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
+
 
 @app.route('/api/admin/usuarios/<email>', methods=['PUT', 'DELETE'])
 @requer_admin
 def api_admin_usuario_detalhes(email):
     """Gerenciar usuário específico (apenas ADM)"""
     
-    usuario = USUARIOS.get(email)
+    usuario = UsuariosDB.obter(email)
     if not usuario:
         return jsonify({'erro': 'Usuário não encontrado'}), 404
     
     if request.method == 'PUT':
-        data = request.json
-        usuario.update({
-            'nome': data.get('nome', usuario['nome']),
-            'role': data.get('role', usuario['role']),
-            'ativo': data.get('ativo', usuario['ativo'])
-        })
-        
-        return jsonify({'sucesso': True, 'usuario': {
-            'email': email,
-            'nome': usuario['nome'],
-            'role': usuario['role'],
-            'ativo': usuario['ativo']
-        }})
+        try:
+            data = request.json
+            usuario_valido = UsuarioUpdate(
+                nome=data.get('nome'),
+                role=data.get('role')
+            )
+            
+            atualizar_dados = {}
+            if usuario_valido.nome:
+                atualizar_dados['nome'] = usuario_valido.nome
+            if usuario_valido.role:
+                atualizar_dados['role'] = usuario_valido.role
+            
+            if UsuariosDB.atualizar(email, **atualizar_dados):
+                usuario_atualizado = UsuariosDB.obter(email)
+                logger.info(f"Usuário atualizado: {email}")
+                return jsonify({
+                    'sucesso': True,
+                    'usuario': usuario_para_json(usuario_atualizado)
+                })
+            else:
+                return jsonify({'erro': 'Erro ao atualizar usuário'}), 500
+                
+        except Exception as e:
+            logger.error(f"Erro ao atualizar usuário: {str(e)}")
+            return jsonify({'erro': str(e)}), 400
     
     elif request.method == 'DELETE':
-        # Não deleta, apenas desativa
-        usuario['ativo'] = False
-        return jsonify({'sucesso': True, 'mensagem': 'Usuário desativado'})
+        # Soft delete - apenas desativa
+        if UsuariosDB.deletar(email):
+            logger.info(f"Usuário desativado: {email}")
+            return jsonify({'sucesso': True, 'mensagem': 'Usuário desativado'})
+        else:
+            return jsonify({'erro': 'Erro ao desativar usuário'}), 500
+
 
 @app.route('/api/admin/historico')
 @requer_admin
 def api_admin_historico():
     """Ver histórico de disparos (apenas ADM)"""
-    return jsonify(HISTORICO)
+    from database import Database
+    
+    db = Database()
+    ativo_val = 'TRUE' if db.is_postgres else '1'
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"""
+            SELECT h.id, h.campanha_id, h.usuario, h.timestamp, 
+                   h.total_beneficiarios, h.resultados_json
+            FROM historico h
+            WHERE h.ativo = {ativo_val}
+            ORDER BY h.timestamp DESC
+        """)
+        
+        import json
+        historicos = []
+        for row in cursor.fetchall():
+            r = dict(row) if hasattr(row, 'keys') else {'id': row[0], 'campanha_id': row[1], 'usuario': row[2], 'timestamp': row[3], 'total_beneficiarios': row[4], 'resultados_json': row[5]}
+            historicos.append({
+                'id': r.get('id', r.get('id')),
+                'campanha_id': r.get('campanha_id', r.get('campanha_id')),
+                'usuario': r.get('usuario', r.get('usuario')),
+                'timestamp': r.get('timestamp', r.get('timestamp')),
+                'total_beneficiarios': r.get('total_beneficiarios', r.get('total_beneficiarios')),
+                'resultados': json.loads(r.get('resultados_json', r.get('resultados_json', '{}')) or '{}')
+            })
+        
+        return jsonify(historicos)
 
-# ============================================================
-# ROTAS DE GERENCIAMENTO WHATSAPP (ADMIN)
-# ============================================================
-
-@app.route('/admin/whatsapp')
-@requer_login
-def admin_whatsapp():
-    """Painel de gerenciamento de WhatsApp para admin"""
-    usuario = obter_usuario_atual()
-    
-    # Verificar se é admin
-    if usuario['role'] != 'admin':
-        return redirect(url_for('dashboard'))
-    
-    return render_template('whatsapp_admin_real.html', 
-                         usuario=usuario)
-
-@app.route('/api/whatsapp/instancias')
-@requer_admin_api
-def api_whatsapp_instancias():
-    """Listar todas as instâncias WhatsApp da Evolution API"""
-    instancias_evolution = evolution_listar_instancias()
-    
-    # Se conseguiu da Evolution, retorna
-    if instancias_evolution:
-        return jsonify(instancias_evolution)
-    
-    # Fallback: retorna nossas instâncias simuladas
-    instancias_list = []
-    for nome, dados in WHATSAPP_INSTANCIAS.items():
-        instancias_list.append({
-            'instance': {
-                'instanceName': nome,
-                'instanceStatus': dados['status']
-            },
-            'contact': {
-                'id': dados['numero'] or 'não conectado'
-            }
-        })
-    return jsonify(instancias_list)
-
-@app.route('/api/whatsapp/conectar', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_conectar():
-    """Conectar novo número WhatsApp"""
-    data = request.json or {}
-    instancia_nome = data.get('instancia_nome')
-    numero = data.get('numero')
-    
-    if not instancia_nome or instancia_nome not in WHATSAPP_INSTANCIAS:
-        return jsonify({'erro': 'Instância não encontrada'}), 400
-    
-    if not numero:
-        return jsonify({'erro': 'Número é obrigatório'}), 400
-    
-    # Atualizar instância
-    WHATSAPP_INSTANCIAS[instancia_nome]['numero'] = numero
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'conectando'
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'Conectando {instancia_nome}...',
-        'instancia': instancia_nome
-    })
-
-@app.route('/api/whatsapp/conectar-numero', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_conectar_numero():
-    """Conectar via número WhatsApp direto"""
-    data = request.json or {}
-    instancia_nome = data.get('instancia_nome')
-    numero = data.get('numero')
-    
-    if not instancia_nome or instancia_nome not in WHATSAPP_INSTANCIAS:
-        return jsonify({'erro': 'Instância não encontrada'}), 400
-    
-    if not numero:
-        return jsonify({'erro': 'Número é obrigatório'}), 400
-    
-    # Limpar número (remover caracteres especiais)
-    numero_limpo = ''.join(c for c in numero if c.isdigit())
-    
-    if len(numero_limpo) < 10:
-        return jsonify({'erro': 'Número WhatsApp inválido'}), 400
-    
-    # Gerar código de confirmação único
-    import random
-    codigo_confirmacao = str(random.randint(100000, 999999))
-    
-    # Armazenar informação de conexão pendente
-    if not hasattr(api, 'conexoes_pendentes'):
-        api.conexoes_pendentes = {}
-    
-    api.conexoes_pendentes[numero_limpo] = {
-        'instancia': instancia_nome,
-        'codigo': codigo_confirmacao,
-        'timestamp': datetime.now().isoformat(),
-        'confirmado': False
-    }
-    
-    # Atualizar status da instância
-    WHATSAPP_INSTANCIAS[instancia_nome]['numero'] = numero_limpo
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'aguardando_confirmacao'
-    
-    # Simular envio de notificação/mensagem (em produção, enviaria via Evolution API)
-    print(f"📱 [SIMULADO] Notificação enviada para WhatsApp: {numero_limpo}")
-    print(f"   Código de confirmação: {codigo_confirmacao}")
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'✓ Notificação enviada para {numero_limpo}. Aguardando confirmação no telefone...',
-        'numero': numero_limpo,
-        'instancia': instancia_nome,
-        'aguardando_confirmacao': True,
-        'codigo_confirmacao': codigo_confirmacao
-    })
-
-@app.route('/api/whatsapp/gerar-codigo', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_gerar_codigo():
-    """Gerar código de autenticação para conectar WhatsApp"""
-    data = request.json or {}
-    instancia_nome = data.get('instancia_nome')
-    
-    if not instancia_nome or instancia_nome not in WHATSAPP_INSTANCIAS:
-        return jsonify({'erro': 'Instância não encontrada'}), 400
-    
-    # Gerar código de 6 dígitos
-    import random
-    codigo = str(random.randint(100000, 999999))
-    
-    # Armazenar o código associado à instância (com timestamp)
-    if not hasattr(api, 'codigos_gerados'):
-        api.codigos_gerados = {}
-    
-    api.codigos_gerados[codigo] = {
-        'instancia': instancia_nome,
-        'timestamp': datetime.now().isoformat(),
-        'validado': False
-    }
-    
-    # Atualizar status da instância
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'aguardando_codigo'
-    
-    return jsonify({
-        'sucesso': True,
-        'codigo': codigo,
-        'instancia': instancia_nome,
-        'mensagem': f'Código {codigo} gerado para {instancia_nome}. Cole no WhatsApp em "Não consegue escanear?"'
-    })
-
-@app.route('/api/whatsapp/validar-codigo/<codigo>', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_validar_codigo(codigo):
-    """Validar código de autenticação (chamado pelo WhatsApp)"""
-    if not hasattr(api, 'codigos_gerados') or codigo not in api.codigos_gerados:
-        return jsonify({'erro': 'Código não encontrado ou expirado'}), 404
-    
-    info_codigo = api.codigos_gerados[codigo]
-    instancia_nome = info_codigo['instancia']
-    
-    # Validar se código é recente (menos de 2 minutos)
-    tempo_gerado = datetime.fromisoformat(info_codigo['timestamp'])
-    idade_codigo = (datetime.now() - tempo_gerado).total_seconds()
-    
-    if idade_codigo > 120:  # 2 minutos
-        return jsonify({'erro': 'Código expirado'}), 400
-    
-    # Marcar instância como conectada
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'conectado'
-    WHATSAPP_INSTANCIAS[instancia_nome]['conectado_em'] = datetime.now().isoformat()
-    WHATSAPP_INSTANCIAS[instancia_nome]['respondendo'] = True
-    info_codigo['validado'] = True
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'✓ {instancia_nome} conectado com sucesso!',
-        'instancia': instancia_nome
-    })
-
-@app.route('/api/whatsapp/desconectar', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_desconectar():
-    """Desconectar número WhatsApp"""
-    data = request.json or {}
-    instancia_nome = data.get('instancia_nome')
-    
-    if not instancia_nome or instancia_nome not in WHATSAPP_INSTANCIAS:
-        return jsonify({'erro': 'Instância não encontrada'}), 400
-    
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'desconectado'
-    WHATSAPP_INSTANCIAS[instancia_nome]['numero'] = None
-    WHATSAPP_INSTANCIAS[instancia_nome]['conectado_em'] = None
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'{instancia_nome} desconectado'
-    })
-
-@app.route('/api/whatsapp/conectar-qrcode', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_conectar_qrcode():
-    """Conectar instância via QR Code REAL da Evolution API"""
-    data = request.json or {}
-    instancia_nome = data.get('instancia_nome')
-    
-    if not instancia_nome:
-        return jsonify({'erro': 'instancia_nome é obrigatório'}), 400
-    
-    # Chamar Evolution API para conectar
-    resultado = evolution_conectar_instancia(instancia_nome)
-    
-    if not resultado:
-        return jsonify({
-            'erro': 'Falha ao conectar com Evolution API. Verifique se está rodando.',
-            'url': EVOLUTION_API_URL
-        }), 500
-    
-    # Atualizar status local
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'conectando_qrcode'
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'✓ Iniciando conexão para {instancia_nome}. Escaneie o QR Code no seu WhatsApp!',
-        'instancia': instancia_nome,
-        'status': 'conectando'
-    })
-
-@app.route('/api/whatsapp/verificar-status/<instancia_nome>')
-@requer_admin_api
-def api_whatsapp_verificar_status(instancia_nome):
-    """Verificar status de conexão em tempo real"""
-    instancias = evolution_listar_instancias()
-    
-    for inst in instancias:
-        if inst.get('instance', {}).get('instanceName') == instancia_nome:
-            status = inst.get('instance', {}).get('instanceStatus')
-            
-            if status == 'open':
-                # Conectou!
-                WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'conectado'
-                WHATSAPP_INSTANCIAS[instancia_nome]['conectado_em'] = datetime.now().isoformat()
-                WHATSAPP_INSTANCIAS[instancia_nome]['respondendo'] = True
-                
-                return jsonify({
-                    'conectado': True,
-                    'status': 'conectado',
-                    'instancia': instancia_nome,
-                    'mensagem': f'✓ {instancia_nome} conectado com sucesso!'
-                })
-            else:
-                return jsonify({
-                    'conectado': False,
-                    'status': status,
-                    'instancia': instancia_nome,
-                    'mensagem': 'Aguardando escanear QR Code...'
-                })
-    
-    return jsonify({'erro': 'Instância não encontrada'}), 404
-
-@app.route('/api/whatsapp/qrcode/<instancia_nome>')
-@requer_admin_api
-def api_whatsapp_qrcode(instancia_nome):
-    """Obter QR Code REAL da Evolution API"""
-    # Primeiro, conectar a instância na Evolution para gerar QR Code
-    resultado_conexao = evolution_conectar_instancia(instancia_nome)
-    
-    if not resultado_conexao:
-        return jsonify({'erro': 'Falha ao conectar com Evolution API'}), 500
-    
-    # Aguardar um pouco para o QR code ser gerado
-    import time
-    time.sleep(1)
-    
-    # Obter o QR Code gerado
-    qrcode_data = evolution_obter_qrcode(instancia_nome)
-    
-    if not qrcode_data:
-        return jsonify({'erro': 'QR Code não disponível. Tente novamente em alguns segundos.'}), 400
-    
-    # Atualizar status da instância
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'aguardando_qrcode'
-    
-    return jsonify({
-        'sucesso': True,
-        'instancia': instancia_nome,
-        'qrcode': qrcode_data,
-        'instrucoes': 'Abra WhatsApp no seu telefone > Configurações > Aparelhos Vinculados > Vincular um aparelho e escaneie o código acima',
-        'timestamp': datetime.now().isoformat()
-    })
-
-# ============================================================
-# ROTAS DE ATENDIMENTO (VENDEDOR)
-# ============================================================
-
-@app.route('/vendedor/atendimento')
-@requer_login
-def vendedor_atendimento():
-    """Tela de atendimento para vendedores"""
-    usuario = obter_usuario_atual()
-    
-    # Filtrar leads pendentes
-    leads_pendentes = [v for k, v in LEADS.items() if v['status'] == 'pendente']
-    leads_atendidos = [v for k, v in LEADS.items() if v['atendido_por'] == session.get('usuario')]
-    
-    # Se for vendedor, ver apenas seus leads
-    if usuario['role'] == 'vendedor':
-        pass  # Pode ver seus próprios leads
-    
-    return render_template('atendimento_vendedor.html',
-                         leads_pendentes=leads_pendentes,
-                         leads_atendidos=leads_atendidos,
-                         usuario=usuario,
-                         conversas=CONVERSAS_LEADS)
-
-@app.route('/api/leads/pendentes')
-@requer_login
-def api_leads_pendentes():
-    """Listar leads não atendidos (apenas pendentes)"""
-    leads = [v for k, v in LEADS.items() if v['status'] == 'pendente']
-    return jsonify(leads)
-
-@app.route('/api/leads/<lead_id>/atender', methods=['POST'])
-@requer_login
-def api_leads_atender(lead_id):
-    """Marcar lead como atendido"""
-    if lead_id not in LEADS:
-        return jsonify({'erro': 'Lead não encontrado'}), 404
-    
-    LEADS[lead_id]['status'] = 'atendido'
-    LEADS[lead_id]['atendido_por'] = session.get('usuario')
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': 'Lead atendido'
-    })
-
-@app.route('/api/leads/<lead_id>/responder', methods=['POST'])
-@requer_login
-def api_leads_responder(lead_id):
-    """Enviar mensagem de resposta ao lead"""
-    data = request.json or {}
-    mensagem = data.get('mensagem')
-    
-    if lead_id not in LEADS:
-        return jsonify({'erro': 'Lead não encontrado'}), 404
-    
-    if not mensagem:
-        return jsonify({'erro': 'Mensagem é obrigatória'}), 400
-    
-    # Adicionar mensagem ao histórico da conversa
-    if lead_id not in CONVERSAS_LEADS:
-        CONVERSAS_LEADS[lead_id] = []
-    
-    CONVERSAS_LEADS[lead_id].append({
-        'direção': 'saída',
-        'mensagem': mensagem,
-        'timestamp': datetime.now().isoformat(),
-        'vendedor': session.get('usuario')
-    })
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': 'Resposta enviada ao lead'
-    })
-
-@app.route('/api/leads/<lead_id>/conversa')
-@requer_login
-def api_leads_conversa(lead_id):
-    """Obter histórico de conversa com lead"""
-    if lead_id not in LEADS:
-        return jsonify({'erro': 'Lead não encontrado'}), 404
-    
-    conversa = CONVERSAS_LEADS.get(lead_id, [])
-    lead = LEADS[lead_id]
-    
-    return jsonify({
-        'lead': lead,
-        'conversa': conversa
-    })
-
-@app.route('/api/whatsapp/confirmar-numero/<numero>', methods=['POST'])
-@requer_admin_api
-def api_whatsapp_confirmar_numero(numero):
-    """Confirmar conexão por número (chamado via webhook/callback)"""
-    numero_limpo = ''.join(c for c in numero if c.isdigit())
-    
-    if not hasattr(api, 'conexoes_pendentes') or numero_limpo not in api.conexoes_pendentes:
-        return jsonify({'erro': 'Conexão não encontrada'}), 404
-    
-    info_conexao = api.conexoes_pendentes[numero_limpo]
-    instancia_nome = info_conexao['instancia']
-    
-    # Marcar como conectada
-    WHATSAPP_INSTANCIAS[instancia_nome]['status'] = 'conectado'
-    WHATSAPP_INSTANCIAS[instancia_nome]['conectado_em'] = datetime.now().isoformat()
-    WHATSAPP_INSTANCIAS[instancia_nome]['respondendo'] = True
-    info_conexao['confirmado'] = True
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': f'✓ {instancia_nome} conectado com sucesso!',
-        'instancia': instancia_nome
-    })
-
-@app.route('/api/whatsapp/status-conexao/<numero>')
-@requer_admin_api
-def api_whatsapp_status_conexao(numero):
-    """Verificar status da conexão aguardando confirmação"""
-    numero_limpo = ''.join(c for c in numero if c.isdigit())
-    
-    if not hasattr(api, 'conexoes_pendentes') or numero_limpo not in api.conexoes_pendentes:
-        return jsonify({'status': 'nao_encontrada'}), 404
-    
-    info_conexao = api.conexoes_pendentes[numero_limpo]
-    
-    return jsonify({
-        'numero': numero_limpo,
-        'instancia': info_conexao['instancia'],
-        'confirmado': info_conexao['confirmado'],
-        'timestamp': info_conexao['timestamp']
-    })
 
 @app.route('/api/health')
 def health():
     """Health check"""
+    usuarios = UsuariosDB.listar_todos()
+    campanhas = CampanhasDB.listar_todas()
+    
+    evolution_status = checar_instancia_evolution()
+    
+    db = Database()
+    db_type = 'PostgreSQL' if db.is_postgres else 'SQLite'
+    
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
-        'banco_integrado': USANDO_BANCO,
-        'usuarios': len(USUARIOS),
-        'campanhas': len(CAMPANHAS)
+        'versao': '2.0',
+        'database': {
+            'usuarios': len(usuarios),
+            'campanhas': len(campanhas),
+            'tipo': db_type
+        },
+        'whatsapp': evolution_status
     })
+
 
 # ============================================================
 # ERROR HANDLERS
@@ -1205,11 +1019,117 @@ def health():
 
 @app.errorhandler(404)
 def not_found(e):
+    logger.warning(f"404 - {request.path}")
     return jsonify({'erro': 'Não encontrado'}), 404
+
+
+@app.route('/api/admin/seed', methods=['POST'])
+def api_seed_dados():
+    """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
+    if os.getenv('FLASK_ENV') == 'production':
+        return jsonify({'erro': 'Nao disponivel em producao'}), 403
+    
+    try:
+        from database import db
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            p = db.placeholder()
+            try:
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS clientes (
+                        id {db.pk_auto()},
+                        nome TEXT NOT NULL,
+                        email TEXT,
+                        phone TEXT,
+                        cpf TEXT,
+                        status TEXT DEFAULT 'lead',
+                        empresa TEXT,
+                        cargo TEXT,
+                        renda DECIMAL(10,2),
+                        margem_consignavel DECIMAL(10,2),
+                        banco_atual TEXT,
+                        custom_fields TEXT,
+                        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ativo BOOLEAN DEFAULT {db.bool_def(True)}
+                    )
+                """)
+            except:
+                pass
+            
+            cursor.execute("SELECT COUNT(*) FROM campanhas")
+            row = cursor.fetchone()
+            qtd_camp = row['count'] if isinstance(row, dict) else row[0]
+            
+            if qtd_camp == 0:
+                campanhas = [
+                    ('Campanha Aposentados', 'Campanha para aposentados do INSS', 'admin@pariscred.com'),
+                    ('Campanha Servidores', 'Campanha para servidores públicos', 'admin@pariscred.com'),
+                    ('Campanha Portabilidade', 'Campanha de portabilidade de consignado', 'admin@pariscred.com'),
+                ]
+                
+                for nome, desc, criador in campanhas:
+                    cursor.execute(f"""
+                        INSERT INTO campanhas (nome, descricao, status, criador, mensagem, beneficiarios_json, botoes_json, instancias_json, total_enviados)
+                        VALUES ({p}, {p}, 'rascunho', {p}, 'Olá! Temos uma proposta especial para você!', '[]', '[]', '[]', 0)
+                    """, (nome, desc, criador))
+            
+            cursor.execute("SELECT COUNT(*) FROM clientes")
+            row = cursor.fetchone()
+            qtd_cli = row['count'] if isinstance(row, dict) else row[0]
+            
+            if qtd_cli == 0:
+                # Criar 20 clientes de exemplo
+                clientes = [
+                    ('Jose da Silva', 'jose@email.com', '48999991111', '12345678901', 'lead', 2500.00, 'INSS'),
+                    ('Maria Santos', 'maria@email.com', '48999992222', '23456789012', 'qualificado', 3200.00, 'INSS'),
+                    ('Pedro Costa', 'pedro@email.com', '48999993333', '34567890123', 'proposta', 1800.00, 'CLT'),
+                    ('Ana Oliveira', 'ana@email.com', '48999994444', '45678901234', 'negociacao', 4500.00, 'INSS'),
+                    ('Joao Lima', 'joao@email.com', '48999995555', '56789012345', 'lead', 2100.00, 'INSS'),
+                    ('Carlos Souza', 'carlos@email.com', '48999996666', '67890123456', 'contratado', 2800.00, 'CLT'),
+                    ('Francisca Dias', 'francisca@email.com', '48999997777', '78901234567', 'lead', 1900.00, 'INSS'),
+                    ('Marcos Rodrigues', 'marcos@email.com', '48999998888', '89012345678', 'qualificado', 3100.00, 'INSS'),
+                    ('Juliana Ferreira', 'juliana@email.com', '48999999999', '90123456789', 'proposta', 2200.00, 'INSS'),
+                    ('Ricardo Almeida', 'ricardo@email.com', '48998887777', '01234567890', 'negociacao', 2600.00, 'CLT'),
+                    ('Fernanda Costa', 'fernanda@email.com', '48998886666', '11223344556', 'lead', 1700.00, 'INSS'),
+                    ('Bruno Martins', 'bruno@email.com', '48887776655', '22334455667', 'qualificado', 3300.00, 'INSS'),
+                    ('Carla Ribeiro', 'carla@email.com', '48876655443', '33445566778', 'proposta', 2400.00, 'CLT'),
+                    ('Diego Souza', 'diego@email.com', '48865544332', '44556677889', 'lead', 2000.00, 'INSS'),
+                    ('Emily Batista', 'emily@email.com', '48854433221', '55667788990', 'negociacao', 2900.00, 'INSS'),
+                    ('Felipe Lima', 'felipe@email.com', '48843322110', '66778899001', 'lead', 1850.00, 'CLT'),
+                    ('Gabriela Santos', 'gabriela@email.com', '48832211099', '77889900112', 'qualificado', 2700.00, 'INSS'),
+                    ('Henrique Alves', 'henrique@email.com', '48821099888', '88990011223', 'proposta', 2300.00, 'CLT'),
+                    ('Isabela Castro', 'isabela@email.com', '48810988777', '99001122334', 'lead', 1600.00, 'INSS'),
+                    ('Joaquim Mendes', 'joaquim@email.com', '48809877666', '00112233445', 'negociacao', 3400.00, 'INSS'),
+                ]
+                
+                for nome, email, phone, cpf, status, margem, banco in clientes:
+                    cursor.execute(f"""
+                        INSERT INTO clientes (nome, email, phone, cpf, status, margem_consignavel, banco_atual)
+                        VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})
+                    """, (nome, email, phone, cpf, status, margem, banco))
+                
+                return jsonify({'sucesso': True, 'mensagem': 'Dados de teste criados!', 'clientes': len(clientes), 'campanhas': len(campanhas)})
+            else:
+                return jsonify({'sucesso': True, 'mensagem': 'Dados ja existem!'})
+                
+    except Exception as e:
+        logger.error(f"Erro ao criar seed: {e}")
+        return jsonify({'erro': str(e)}), 500
+
 
 @app.errorhandler(500)
 def server_error(e):
+    logger.error(f"500 - {str(e)}")
     return jsonify({'erro': 'Erro interno do servidor'}), 500
+
+
+@app.errorhandler(429)
+def rate_limit_handler(e):
+    logger.warning(f"Rate limit excedido: {request.ip}")
+    return jsonify({'erro': 'Limite de requisições excedido. Tente novamente mais tarde.'}), 429
+
 
 # ============================================================
 # MAIN
@@ -1217,16 +1137,24 @@ def server_error(e):
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print(" PARISCRED INTELLIGENCE - SaaS COMPLETO")
+    print(" PARISCRED INTELLIGENCE v2.0 - SEGURO")
     print("="*70)
-    
-    modo = "BANCO DE DADOS" if USANDO_BANCO else "MODO DEMONSTRACAO"
-    print(f"\n [INFO] Modo: {modo}")
-    print(f" [SUCCESS] Servidor iniciando na porta 5000...")
-    print(f" [SUCCESS] Acessar em: http://localhost:5000")
-    print(f"\n [INFO] Contas de Teste:")
+    print(f"\n Servidor iniciando na porta 5000...")
+    print(f" Acessar em: http://localhost:5000")
+    print(f" Banco de dados: app.db (SQLite)")
+    print(f" Evolution API: {os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')}")
+    print(f" Rate Limiting: ATIVADO")
+    print(f" Logging: {LOG_LEVEL}")
+    print(f"\n Contas de Teste:")
     print(f"   ADM: admin@pariscred.com / Admin@2025")
-    print(f"   Vendedor: vendedor1@pariscred.com / Vendedor@123")
+    print(f"   Vendedor: vendedor@pariscred.com / Vendedor@123")
     print(f"\n" + "="*70 + "\n")
     
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    # Verificar modo de produção
+    debug_mode = os.getenv('FLASK_ENV', 'production') != 'production'
+    
+    app.run(
+        debug=debug_mode,
+        port=int(os.getenv('PORT', 5000)),
+        host='0.0.0.0'
+    )

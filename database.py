@@ -1,14 +1,11 @@
 import os
-import sqlite3
 import json
 import bcrypt
 import logging
 from datetime import datetime
 from contextlib import contextmanager
 from typing import Optional, Dict, List, Any, Tuple
-import urllib.parse as urlparse
 
-# Carregar variáveis de ambiente se não estiverem
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -50,7 +47,6 @@ class Database:
             import psycopg2
             from psycopg2.extras import RealDictCursor
             
-            # Ajuste para URLs do Heroku/Vercel (postgres:// -> postgresql://)
             url = DATABASE_URL.replace("postgres://", "postgresql://")
             
             conn = psycopg2.connect(url, cursor_factory=RealDictCursor)
@@ -64,6 +60,7 @@ class Database:
             finally:
                 conn.close()
         else:
+            import sqlite3
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             try:
@@ -134,10 +131,8 @@ class Database:
                 )
             """)
             
-            # CRIAR USUÁRIO ADMIN PADRÃO SE NÃO EXISTIR
             cursor.execute(f"SELECT COUNT(*) as total FROM usuarios")
             row = cursor.fetchone()
-            # Compatibilidade para RealDictRow e Tupla
             total = row['total'] if isinstance(row, dict) else row[0]
             
             if total == 0:

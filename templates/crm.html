@@ -45,12 +45,10 @@
         .cliente-phone { font-size: 14px; color: #666; }
         .cliente-meta { display: flex; gap: 15px; margin-top: 8px; font-size: 12px; color: #999; }
         .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .badge-lead { background: #fff3cd; color: #856404; }
-        .badge-ativo { background: #d4edda; color: #155724; }
-        .badge-inativo { background: #f8d7da; color: #721c24; }
-        .badge-negociacao { background: #cce5ff; color: #004085; }
-        .badge-concluido { background: #d4edda; color: #155724; }
-        .badge-emprestimo { background: #e2e3e5; color: #383d41; }
+        .badge-lead, .badge-novo-lead { background: #fff3cd; color: #856404; }
+        .badge-ativo, .badge-em-negociacao { background: #cce5ff; color: #004085; }
+        .badge-inativo, .badge-pendente { background: #f8d7da; color: #721c24; }
+        .badge-emprestimo, .badge-finalizado { background: #d4edda; color: #155724; }
         .cliente-actions { display: flex; gap: 8px; }
         .btn-small { padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; font-size: 12px; }
         .btn-whatsapp { background: #25D366; color: white; border: none; }
@@ -69,6 +67,34 @@
         .btn-submit { padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
         .empty-state { text-align: center; padding: 60px 20px; color: #666; }
         .empty-icon { font-size: 64px; margin-bottom: 20px; }
+
+        /* Tema Kanban Modificado - Dark/Light elegante */
+        .view-toggle { display: flex; gap: 10px; margin-top: 15px; margin-bottom: 10px; }
+        .kanban-board { display: none; gap: 20px; overflow-x: auto; padding-bottom: 20px; min-height: 600px; }
+        .kanban-board.active { display: flex; }
+        .clientes-grid.hidden { display: none; }
+        
+        .kanban-col { background: #eef2f6; border-radius: 12px; width: 300px; min-width: 300px; display: flex; flex-direction: column; max-height: 75vh; }
+        .kanban-header { padding: 15px; font-weight: 600; font-size: 15px; color: #333; border-bottom: 2px solid #e0e6ed; display: flex; justify-content: space-between; align-items: center; border-radius: 12px 12px 0 0; }
+        .col-novo-lead .kanban-header { border-top: 4px solid #f39c12; }
+        .col-em-negociacao .kanban-header { border-top: 4px solid #3498db; }
+        .col-pendente .kanban-header { border-top: 4px solid #e67e22; }
+        .col-finalizado .kanban-header { border-top: 4px solid #2ecc71; }
+        .kanban-count { background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        
+        .kanban-cards { padding: 15px; overflow-y: auto; flex: 1; min-height: 150px; }
+        .kanban-cards.drag-over { background: rgba(0,0,0,0.05); border-radius: 8px; }
+        
+        .k-card { background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); cursor: grab; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid #f0f0f0; border-left: 3px solid #ccc; }
+        .k-card.status-novo-lead { border-left-color: #f39c12; }
+        .k-card.status-em-negociacao { border-left-color: #3498db; }
+        .k-card.status-pendente { border-left-color: #e67e22; }
+        .k-card.status-finalizado { border-left-color: #2ecc71; }
+        .k-card:active { cursor: grabbing; transform: scale(0.98); }
+        .k-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
+        .k-card-title { font-weight: 600; font-size: 14px; margin-bottom: 8px; color: #2c3e50; }
+        .k-card-meta { font-size: 12px; color: #7f8c8d; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+        .k-card-actions { display: flex; gap: 5px; justify-content: flex-end; border-top: 1px solid #eee; padding-top: 10px; }
     </style>
 </head>
 <body>
@@ -129,16 +155,52 @@
             
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="🔍 Buscar por nome, CPF ou telefone..." oninput="filtrarClientes()">
-                <div class="filtros">
+                <div class="view-toggle">
+                    <button class="filtro-btn active" id="btn-view-kanban" onclick="toggleView('kanban')">📋 Modo Kanban</button>
+                    <button class="filtro-btn" id="btn-view-list" onclick="toggleView('list')">📄 Modo Lista</button>
+                </div>
+                <div class="filtros" id="filtros-lista" style="display:none;">
                     <button class="filtro-btn active" onclick="filtrarPorStatus('todos')">Todos</button>
-                    <button class="filtro-btn" onclick="filtrarPorStatus('lead')">🎯 Leads</button>
-                    <button class="filtro-btn" onclick="filtrarPorStatus('ativo')">🤝 Em Negociação</button>
-                    <button class="filtro-btn" onclick="filtrarPorStatus('emprestimo')">💰 Com Empréstimo</button>
-                    <button class="filtro-btn" onclick="filtrarPorStatus('inativo')">❌ Inativos</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('Novo Lead')">🎯 Novo Lead</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('Em Negociação')">🤝 Em Negociação</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('Pendente')">⏳ Pendente</button>
+                    <button class="filtro-btn" onclick="filtrarPorStatus('Finalizado')">✅ Finalizado</button>
+                </div>
+            </div>
+
+            <div class="kanban-board active" id="kanban-board">
+                <div class="kanban-col col-novo-lead">
+                    <div class="kanban-header">🎯 Novo Lead <span class="kanban-count" id="count-novo-lead">0</span></div>
+                    <div class="kanban-cards" id="col-novo-lead" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Novo Lead')"></div>
+                </div>
+                <div class="kanban-col col-em-negociacao">
+                    <div class="kanban-header">🤝 Em Negociação <span class="kanban-count" id="count-em-negociacao">0</span></div>
+                    <div class="kanban-cards" id="col-em-negociacao" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Em Negociação')"></div>
+                </div>
+                <div class="kanban-col col-pendente">
+                    <div class="kanban-header">⏳ Pendente <span class="kanban-count" id="count-pendente">0</span></div>
+                    <div class="kanban-cards" id="col-pendente" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Pendente')"></div>
+                </div>
+                <div class="kanban-col col-finalizado">
+                    <div class="kanban-header">✅ Finalizado <span class="kanban-count" id="count-finalizado">0</span></div>
+                    <div class="kanban-cards" id="col-finalizado" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Finalizado')"></div>
+                </div>
+            </div>
+                <div class="kanban-col col-ativo">
+                    <div class="kanban-header">🤝 Em Negociação <span class="kanban-count" id="count-ativo">0</span></div>
+                    <div class="kanban-cards" id="col-ativo" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'ativo')"></div>
+                </div>
+                <div class="kanban-col col-emprestimo">
+                    <div class="kanban-header">💰 Aprovado <span class="kanban-count" id="count-emprestimo">0</span></div>
+                    <div class="kanban-cards" id="col-emprestimo" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'emprestimo')"></div>
+                </div>
+                <div class="kanban-col col-inativo">
+                    <div class="kanban-header">❌ Perdido <span class="kanban-count" id="count-inativo">0</span></div>
+                    <div class="kanban-cards" id="col-inativo" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'inativo')"></div>
                 </div>
             </div>
             
-            <div class="clientes-grid" id="clientes-list">
+            <div class="clientes-grid hidden" id="clientes-list">
                 <div class="empty-state">
                     <div class="empty-icon">👥</div>
                     <p>Nenhum cliente encontrado</p>
@@ -207,10 +269,10 @@
             });
         
         function carregarClientes() {
-            fetch('/api/crm/clientes')
+            fetch('/api/crm/leads')
                 .then(r => r.json())
                 .then(data => {
-                    todosClientes = Array.isArray(data) ? data : (data.clientes || []);
+                    todosClientes = Array.isArray(data.leads) ? data.leads : (data.clientes || []);
                     atualizarStats();
                     renderizarClientes();
                 });
@@ -218,9 +280,10 @@
         
         function atualizarStats() {
             const total = todosClientes.length;
-            const leads = todosClientes.filter(c => c.status === 'lead').length;
-            const negociacao = todosClientes.filter(c => c.status === 'ativo').length;
-            const concluidos = todosClientes.filter(c => c.status === 'emprestimo').length;
+            const leads = todosClientes.filter(c => c.status === 'Novo Lead').length;
+            const negociacao = todosClientes.filter(c => c.status === 'Em Negociação').length;
+            const pendente = todosClientes.filter(c => c.status === 'Pendente').length;
+            const concluidos = todosClientes.filter(c => c.status === 'Finalizado').length;
             
             document.getElementById('stat-total').textContent = total;
             document.getElementById('stat-leads').textContent = leads;
@@ -247,6 +310,7 @@
             
             if (clientes.length === 0) {
                 container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>Nenhum cliente encontrado</p></div>`;
+                renderizarKanban(clientes);
                 return;
             }
             
@@ -260,18 +324,132 @@
                             ${c.margem_consignavel ? `<span>💰 R$ ${parseFloat(c.margem_consignavel).toFixed(2)}</span>` : ''}
                         </div>
                     </div>
-                    <span class="badge badge-${c.status || 'lead'}">${getLabelStatus(c.status)}</span>
+                    <span class="badge badge-${(c.status || 'Novo Lead').toLowerCase().replace(/ /g, '-')}">${getLabelStatus(c.status)}</span>
                     <div class="cliente-actions">
                         <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}', '${c.nome}', '${c.margem_consignavel || 0}')">💬</button>
                         <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
                     </div>
                 </div>
             `).join('');
+
+            renderizarKanban(clientes);
+        }
+        
+        function renderizarKanban(clientes) {
+            const statusList = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado'];
+            const cols = {
+                'Novo Lead': [],
+                'Em Negociação': [],
+                'Pendente': [],
+                'Finalizado': []
+            };
+            
+            clientes.forEach(c => {
+                const statusKey = statusList.includes(c.status) ? c.status : 'Novo Lead';
+                cols[statusKey].push(c);
+            });
+            
+            statusList.forEach(status => {
+                const statusSlug = status.toLowerCase().replace(/ /g, '-');
+                const countEl = document.getElementById('count-' + statusSlug);
+                if(countEl) countEl.innerText = cols[status].length;
+                
+                const colEl = document.getElementById('col-' + statusSlug);
+                if(colEl) {
+                    colEl.innerHTML = cols[status].map(c => `
+                        <div class="k-card status-${statusSlug}" draggable="true" ondragstart="drag(event, ${c.id})">
+                            <div class="k-card-title">${c.nome || 'Sem nome'}</div>
+                            <div class="k-card-meta">
+                                <span>📱 ${c.phone || 'Sem telefone'}</span>
+                                ${c.margem_consignavel ? `<span>💰 R$ ${parseFloat(c.margem_consignavel).toFixed(2)}</span>` : ''}
+                            </div>
+                            <div class="k-card-actions">
+                                <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}', '${c.nome}', '${c.margem_consignavel || 0}')">💬</button>
+                                <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            });
+        }
+
+        /* --- Drag and Drop Logic --- */
+        function allowDrop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('drag-over');
+        }
+
+        function dragLeave(ev) {
+            ev.currentTarget.classList.remove('drag-over');
+        }
+
+        function drag(ev, id) {
+            ev.dataTransfer.setData("cliente_id", id);
+        }
+
+        function drop(ev, novoStatus) {
+            ev.preventDefault();
+            document.querySelectorAll('.kanban-cards').forEach(el => el.classList.remove('drag-over'));
+            
+            const clienteId = ev.dataTransfer.getData("cliente_id");
+            if(!clienteId) return;
+
+            const clienteIndex = todosClientes.findIndex(c => c.id == clienteId);
+            if(clienteIndex === -1) return;
+            
+            if(todosClientes[clienteIndex].status === novoStatus) return;
+            
+            const statusAnterior = todosClientes[clienteIndex].status;
+            todosClientes[clienteIndex].status = novoStatus;
+            atualizarStats();
+            renderizarClientes();
+
+            fetch('/api/crm/update_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lead_id: parseInt(clienteId), status: novoStatus })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if(!data.success) {
+                    alert('Erro ao mover card: ' + (data.erro || 'Erro desconhecido'));
+                    todosClientes[clienteIndex].status = statusAnterior;
+                    atualizarStats();
+                    renderizarClientes();
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                todosClientes[clienteIndex].status = statusAnterior;
+                atualizarStats();
+                renderizarClientes();
+            });
+        }
+        
+        function toggleView(mode) {
+            if (mode === 'kanban') {
+                document.getElementById('kanban-board').classList.add('active');
+                document.getElementById('clientes-list').classList.add('hidden');
+                document.getElementById('filtros-lista').style.display = 'none';
+                document.getElementById('btn-view-kanban').classList.add('active');
+                document.getElementById('btn-view-list').classList.remove('active');
+            } else {
+                document.getElementById('kanban-board').classList.remove('active');
+                document.getElementById('clientes-list').classList.remove('hidden');
+                document.getElementById('filtros-lista').style.display = 'flex';
+                document.getElementById('btn-view-list').classList.add('active');
+                document.getElementById('btn-view-kanban').classList.remove('active');
+            }
         }
         
         function getLabelStatus(status) {
-            const labels = { 'lead': '🎯 Lead', 'ativo': '🤝 Negociação', 'emprestimo': '💰 Empréstimo', 'inativo': '❌ Inativo' };
-            return labels[status] || '🎯 Lead';
+            const labels = { 
+                'Novo Lead': '🎯 Novo Lead', 
+                'Em Negociação': '🤝 Em Negociação', 
+                'Pendente': '⏳ Pendente', 
+                'Finalizado': '✅ Finalizado' 
+            };
+            return labels[status] || '🎯 Novo Lead';
         }
         
         function filtrarPorStatus(status) {
