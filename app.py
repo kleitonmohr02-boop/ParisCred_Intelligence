@@ -55,6 +55,58 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# SEED AUTOMATICO EM PRODUCAO
+def rodar_seed_se_necessario():
+    """Roda o seed automaticamente em produção se não houver clientes"""
+    if os.getenv('FLASK_ENV') == 'production':
+        try:
+            from database import Database
+            db = Database()
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) as total FROM clientes")
+                row = cursor.fetchone()
+                total = row['total'] if isinstance(row, dict) else row[0]
+                if total == 0:
+                    print(">>> CRIANDO DADOS DE DEMONSTRACAO...")
+                    # Criar clientes diretamente
+                    STATUS_KANBAN = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado']
+                    clientes = [
+                        ('Jose da Silva', 'jose@email.com', '48999991111', '12345678901', STATUS_KANBAN[0], 2500.00, 'INSS'),
+                        ('Maria Santos', 'maria@email.com', '48999992222', '23456789012', STATUS_KANBAN[1], 3200.00, 'INSS'),
+                        ('Pedro Costa', 'pedro@email.com', '48999993333', '34567890123', STATUS_KANBAN[2], 1800.00, 'CLT'),
+                        ('Ana Oliveira', 'ana@email.com', '48999994444', '45678901234', STATUS_KANBAN[1], 4500.00, 'INSS'),
+                        ('Joao Lima', 'joao@email.com', '48999995555', '56789012345', STATUS_KANBAN[0], 2100.00, 'INSS'),
+                        ('Carlos Souza', 'carlos@email.com', '48999996666', '67890123456', STATUS_KANBAN[3], 2800.00, 'CLT'),
+                        ('Francisca Dias', 'francisca@email.com', '48999997777', '78901234567', STATUS_KANBAN[0], 1900.00, 'INSS'),
+                        ('Marcos Rodrigues', 'marcos@email.com', '48999998888', '89012345678', STATUS_KANBAN[1], 3100.00, 'INSS'),
+                        ('Juliana Ferreira', 'juliana@email.com', '48999999999', '90123456789', STATUS_KANBAN[2], 2200.00, 'INSS'),
+                        ('Ricardo Almeida', 'ricardo@email.com', '48998887777', '01234567890', STATUS_KANBAN[1], 2600.00, 'CLT'),
+                        ('Fernanda Costa', 'fernanda@email.com', '48998886666', '11223344556', STATUS_KANBAN[0], 1700.00, 'INSS'),
+                        ('Bruno Martins', 'bruno@email.com', '48887776655', '22334455667', STATUS_KANBAN[1], 3300.00, 'INSS'),
+                        ('Carla Ribeiro', 'carla@email.com', '48876655443', '33445566778', STATUS_KANBAN[2], 2400.00, 'CLT'),
+                        ('Diego Souza', 'diego@email.com', '48865544332', '44556677889', STATUS_KANBAN[0], 2000.00, 'INSS'),
+                        ('Emily Batista', 'emily@email.com', '48854433221', '55667788990', STATUS_KANBAN[1], 2900.00, 'INSS'),
+                        ('Felipe Lima', 'felipe@email.com', '48843322110', '66778899001', STATUS_KANBAN[0], 1850.00, 'CLT'),
+                        ('Gabriela Santos', 'gabriela@email.com', '48832211099', '77889900112', STATUS_KANBAN[1], 2700.00, 'INSS'),
+                        ('Henrique Alves', 'henrique@email.com', '48821099888', '88990011223', STATUS_KANBAN[2], 2300.00, 'CLT'),
+                        ('Isabela Castro', 'isabela@email.com', '48810988777', '99001122334', STATUS_KANBAN[0], 1600.00, 'INSS'),
+                        ('Joaquim Mendes', 'joaquim@email.com', '48809877666', '00112233445', STATUS_KANBAN[3], 3400.00, 'INSS'),
+                    ]
+                    p = db.placeholder()
+                    for nome, email, phone, cpf, status, margem, banco in clientes:
+                        cursor.execute(f"""
+                            INSERT INTO clientes (nome, email, phone, cpf, status, margem_consignavel, banco_atual)
+                            VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})
+                        """, (nome, email, phone, cpf, status, margem, banco))
+                    conn.commit()
+                    print(f">>> {len(clientes)} clientes criados!")
+        except Exception as e:
+            print(f"Erro ao rodar seed: {e}")
+
+# Rodar seed ao importar o app
+rodar_seed_se_necessario()
+
 # Security: Secret key do .env ou gerar uma nova
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 
