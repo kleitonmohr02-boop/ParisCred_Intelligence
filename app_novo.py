@@ -229,7 +229,7 @@ def checar_instancia_evolution(instance_name=None):
     """
     api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
     api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
-    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01')
+    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'ParisCred_01')
     
     url = f"{api_url}/instance/connectionState/{instance}"
     
@@ -240,13 +240,28 @@ def checar_instancia_evolution(instance_name=None):
         
         if response.status_code == 200:
             data = response.json()
+            state = data.get('instance', {}).get('state', 'unknown')
             return {
                 'status': 'ok',
                 'instance': instance,
-                'state': data.get('instance', {}).get('state', 'unknown')
+                'state': state,
+                'conectado': state == 'open'
             }
         else:
-            return {'status': 'erro', 'message': response.text}
+            # Tentar listar instâncias
+            list_url = f"{api_url}/instance/fetchInstances"
+            list_resp = requests.get(list_url, headers=headers, timeout=10)
+            if list_resp.status_code == 200:
+                insts = list_resp.json()
+                for i in insts:
+                    if i.get('name') == instance:
+                        return {
+                            'status': 'ok',
+                            'instance': instance,
+                            'state': i.get('connectionStatus', 'unknown'),
+                            'conectado': i.get('connectionStatus') == 'open'
+                        }
+            return {'status': 'erro', 'message': f'Status: {response.status_code}'}
             
     except Exception as e:
         logger.error(f"Erro ao verificar instância: {str(e)}")
