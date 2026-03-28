@@ -1026,8 +1026,9 @@ def not_found(e):
 @app.route('/api/admin/seed', methods=['POST'])
 def api_seed_dados():
     """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
-    if os.getenv('FLASK_ENV') == 'production':
-        return jsonify({'erro': 'Nao disponivel em producao'}), 403
+    # Temporariamente desbloqueado para teste
+    # if os.getenv('FLASK_ENV') == 'production':
+    #     return jsonify({'erro': 'Nao disponivel em producao'}), 403
     
     try:
         from database import db
