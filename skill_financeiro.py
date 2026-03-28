@@ -160,12 +160,13 @@ class FinanceiroDB:
         
         # 2. Histórico - buscar empréstimos passados
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"""
                 SELECT COUNT(*) as total, 
                        SUM(CASE WHEN status = 'pago' THEN 1 ELSE 0 END) as pagos
-                FROM emprestimos WHERE cliente_id = {db.placeholder()} AND ativo = 1
+                FROM emprestimos WHERE cliente_id = {db.placeholder()} AND ativo = {ativo_val}
             """, (cliente_id,))
             row = dict(cursor.fetchone())
             
@@ -237,7 +238,8 @@ class FinanceiroDB:
                 """, (cliente_id, valor, taxa_anual, parcelas))
                 
                 if db.is_postgres:
-                    emprestimo_id = cursor.fetchone()['id']
+                    row = cursor.fetchone()
+                    emprestimo_id = row['id'] if row else None
                 else:
                     emprestimo_id = cursor.lastrowid
                 
@@ -277,33 +279,33 @@ class FinanceiroDB:
         with db.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Total emprestado
             cursor.execute(f"""
                 SELECT COALESCE(SUM(valor_solicitado), 0) as total
                 FROM emprestimos WHERE status = 'aprovado' AND ativo = {db.bool_def(True)}
             """)
-            total_emp = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            total_emp = float(row['total']) if row and row['total'] else 0
             
-            # Total de juros arrecadado
             cursor.execute(f"""
                 SELECT COALESCE(SUM(valor_juros), 0) as total
                 FROM parcelas WHERE status = 'paga' AND ativo = {db.bool_def(True)}
             """)
-            total_juros = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            total_juros = float(row['total']) if row and row['total'] else 0
             
-            # Empréstimos ativos
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM emprestimos WHERE status = 'aprovado' AND ativo = {db.bool_def(True)}
             """)
-            emp_ativos = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            emp_ativos = row['total'] if row else 0
             
-            # Parcelas atrasadas
             data_agora = "CURRENT_TIMESTAMP" if db.is_postgres else "datetime('now')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM parcelas 
                 WHERE status = 'pendente' AND data_vencimento < {data_agora} AND ativo = {db.bool_def(True)}
             """)
-            atrasadas = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            atrasadas = row['total'] if row else 0
         
         return {
             "total_emprestimos": float(total_emp),

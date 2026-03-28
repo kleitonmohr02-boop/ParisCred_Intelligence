@@ -109,11 +109,12 @@ class WhatsAppDB:
     def listar_instancias() -> List[Dict]:
         """Lista todas as instâncias"""
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT id, nome_instancia, phone, status, data_conexao, ultima_atividade
-                FROM whatsapp_instancias WHERE ativo = 1
+                FROM whatsapp_instancias WHERE ativo = {ativo_val}
             """)
             
             return [dict(row) for row in cursor.fetchall()]
@@ -142,9 +143,9 @@ class WhatsAppDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            # First, get the instance_id from nome_instancia
+            ativo_val = db.bool_def(True)
             p = db.placeholder()
-            cursor.execute(f"SELECT id FROM whatsapp_instancias WHERE nome_instancia = {p} AND ativo = 1", (nome_instancia,))
+            cursor.execute(f"SELECT id FROM whatsapp_instancias WHERE nome_instancia = {p} AND ativo = {ativo_val}", (nome_instancia,))
             instancia_row = cursor.fetchone()
             instancia_id = instancia_row['id'] if instancia_row else None
 

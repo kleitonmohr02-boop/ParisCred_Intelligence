@@ -22,9 +22,9 @@ class AdminReportsDB:
         with db.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Volume de clientes
             cursor.execute(f"SELECT COUNT(*) as total FROM clientes WHERE ativo = {db.bool_def(True)}")
-            total_clientes = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            total_clientes = row['total'] if row else 0
             
             p = db.placeholder()
             cursor.execute(f"""
@@ -34,22 +34,20 @@ class AdminReportsDB:
             row_novos = cursor.fetchone()
             clientes_novos = row_novos['total'] if row_novos else 0
             
-            # Volume financeiro
             cursor.execute(f"""
                 SELECT SUM(valor_solicitado) as total 
                 FROM emprestimos WHERE data_solicitacao >= {p}
             """, (data_inicio,))
             row_emp = cursor.fetchone()
-            total_emp = row_emp['total'] if row_emp and row_emp['total'] else 0
+            total_emp = float(row_emp['total']) if row_emp and row_emp['total'] else 0
             
-            # Juros arrecadado
             cursor.execute(f"""
                 SELECT COALESCE(SUM(valor_juros), 0) as total
                 FROM parcelas WHERE status = 'paga' AND ativo = {db.bool_def(True)}
             """)
-            juros_total = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            juros_total = float(row['total']) if row and row['total'] else 0
             
-            # Performance
             cursor.execute(f"""
                 SELECT 
                     COUNT(*) as total, 
@@ -62,13 +60,13 @@ class AdminReportsDB:
             
             taxa_aprovacao = (aprovadas / total_propostas * 100) if total_propostas > 0 else 0
             
-            # Risco
             data_agora = "CURRENT_TIMESTAMP" if db.is_postgres else "datetime('now')"
             cursor.execute(f"""
                 SELECT COUNT(*) as total FROM parcelas 
                 WHERE status = 'pendente' AND data_vencimento < {data_agora} AND ativo = {db.bool_def(True)}
             """)
-            atrasadas = cursor.fetchone()['total']
+            row = cursor.fetchone()
+            atrasadas = row['total'] if row else 0
             
             return {
                 "periodo": f"Últimos {dias} dias",
@@ -100,10 +98,11 @@ class AdminReportsDB:
         db = Database()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            ativo_val = db.bool_def(True)
+            cursor.execute(f"""
                 SELECT status, COUNT(*) as total, 
                        COALESCE(SUM(margem_consignavel), 0) as margem_total
-                FROM clientes WHERE ativo = 1
+                FROM clientes WHERE ativo = {ativo_val}
                 GROUP BY status
                 ORDER BY total DESC
             """)
@@ -126,13 +125,15 @@ class AdminReportsDB:
         """Top clientes por renda"""
         
         db = Database()
+        ativo_val = db.bool_def(True)
+        p = db.placeholder()
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT id, nome, email, phone, renda, margem_consignavel, status
-                FROM clientes WHERE ativo = 1 AND renda IS NOT NULL
+                FROM clientes WHERE ativo = {ativo_val} AND renda IS NOT NULL
                 ORDER BY renda DESC
-                LIMIT ?
+                LIMIT {p}
             """, (limite,))
             
             return [dict(row) for row in cursor.fetchall()]

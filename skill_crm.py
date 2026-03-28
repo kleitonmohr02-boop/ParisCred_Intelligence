@@ -109,9 +109,10 @@ class ClientesDB:
     def obter_cliente(cliente_id: int) -> Optional[Dict]:
         """Obtém dados do cliente"""
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM clientes WHERE id = {db.placeholder()} AND ativo = 1", (cliente_id,))
+            cursor.execute(f"SELECT * FROM clientes WHERE id = {db.placeholder()} AND ativo = {ativo_val}", (cliente_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
     
@@ -119,34 +120,36 @@ class ClientesDB:
     def listar_clientes(status: str = None, limite: int = 50) -> List[Dict]:
         """Lista clientes com filtro opcional"""
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
             
             if status:
                 cursor.execute(f"""
                     SELECT * FROM clientes 
-                    WHERE status = {db.placeholder()} AND ativo = 1 
+                    WHERE status = {db.placeholder()} AND ativo = {ativo_val}
                     LIMIT {db.placeholder()}
                 """, (status, limite))
             else:
-                cursor.execute(f"SELECT * FROM clientes WHERE ativo = 1 LIMIT {db.placeholder()}", (limite,))
+                cursor.execute(f"SELECT * FROM clientes WHERE ativo = {ativo_val} LIMIT {db.placeholder()}", (limite,))
             
             return [dict(row) for row in cursor.fetchall()]
     
     @staticmethod
     def atualizar_status(cliente_id: int, novo_status: str) -> Dict:
         """Atualiza status do cliente"""
-        status_validos = ['lead', 'ativo', 'inativo', 'bloqueado', 'contatado']
+        status_validos = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado']
         
         if novo_status not in status_validos:
             return {"erro": f"Status deve ser um de: {status_validos}"}
         
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
             p = db.placeholder()
             cursor.execute(f"""
-                UPDATE clientes SET status = {p} WHERE id = {p} AND ativo = 1
+                UPDATE clientes SET status = {p} WHERE id = {p} AND ativo = {ativo_val}
             """, (novo_status, cliente_id))
             conn.commit()
         
@@ -195,13 +198,14 @@ class ClientesDB:
     def relatorio_por_status() -> Dict:
         """Relatório de clientes por status"""
         db = Database()
+        ativo_val = db.bool_def(True)
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT status, COUNT(*) as total, 
                        COALESCE(SUM(margem_consignavel), 0) as margem_total
                 FROM clientes
-                WHERE ativo = 1
+                WHERE ativo = {ativo_val}
                 GROUP BY status
             """)
             
