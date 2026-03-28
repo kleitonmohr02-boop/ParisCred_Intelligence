@@ -1151,7 +1151,7 @@ if __name__ == '__main__':
     print("="*70)
     print(f"\n Servidor iniciando na porta 5000...")
     print(f" Acessar em: http://localhost:5000")
-    print(f" Banco de dados: app.db (SQLite)")
+    print(f" Banco de dados: {os.getenv('DATABASE_PATH', 'app.db')}")
     print(f" Evolution API: {os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')}")
     print(f" Rate Limiting: ATIVADO")
     print(f" Logging: {LOG_LEVEL}")
@@ -1159,6 +1159,25 @@ if __name__ == '__main__':
     print(f"   ADM: admin@pariscred.com / Admin@2025")
     print(f"   Vendedor: vendedor@pariscred.com / Vendedor@123")
     print(f"\n" + "="*70 + "\n")
+    
+    # RODAR SEED AUTOMATICO EM PRODUCAO
+    if os.getenv('FLASK_ENV') == 'production':
+        try:
+            from app import app
+            with app.app_context():
+                from database import Database
+                db = Database()
+                with db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) as total FROM clientes")
+                    row = cursor.fetchone()
+                    total = row['total'] if isinstance(row, dict) else row[0]
+                    if total == 0:
+                        print(">>> CRIANDO DADOS DE DEMONSTRACAO...")
+                        resp = app.test_client().get('/api/admin/seed')
+                        print(f">>> SEED RESULT: {resp.status_code}")
+        except Exception as e:
+            print(f"Erro ao rodar seed: {e}")
     
     # Verificar modo de produção
     debug_mode = os.getenv('FLASK_ENV', 'production') != 'production'
