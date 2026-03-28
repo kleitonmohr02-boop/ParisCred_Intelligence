@@ -819,6 +819,45 @@ def not_found(e):
     return jsonify({'erro': 'Não encontrado'}), 404
 
 
+@app.route('/api/admin/seed', methods=['POST'])
+def api_seed_dados():
+    """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
+    if os.getenv('FLASK_ENV') == 'production':
+        return jsonify({'erro': 'Não disponível em produção'}), 403
+    
+    try:
+        from database import db
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Verificar se já tem dados
+            cursor.execute("SELECT COUNT(*) FROM campanhas")
+            qtd_camp = cursor.fetchone()[0]
+            
+            if qtd_camp == 0:
+                # Criar campanhas de teste
+                campanhas = [
+                    ('Campanha Aposentados', 'Campanha para aposentados do INSS', 'admin@pariscred.com'),
+                    ('Campanha Servidores', 'Campanha para servidores públicos', 'admin@pariscred.com'),
+                    ('Campanha Portabilidade', 'Campanha de portabilidade de consignado', 'admin@pariscred.com'),
+                ]
+                
+                for nome, desc, criador in campanhas:
+                    cursor.execute("""
+                        INSERT INTO campanhas (nome, descricao, status, criador, mensagem, beneficiarios_json, botoes_json, instancias_json, total_enviados)
+                        VALUES (?, ?, 'rascunho', ?, 'Olá! Temos uma proposta especial para você!', '[]', '[]', '[]', 0)
+                    """, (nome, desc, criador))
+                
+                return jsonify({'sucesso': True, 'mensagem': 'Dados de teste criados!'})
+            else:
+                return jsonify({'sucesso': True, 'mensagem': 'Dados já existem!'})
+                
+    except Exception as e:
+        logger.error(f"Erro ao criar seed: {e}")
+        return jsonify({'erro': str(e)}), 500
+
+
 @app.errorhandler(500)
 def server_error(e):
     logger.error(f"500 - {str(e)}")
