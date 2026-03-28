@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Extrato - ParisCred Intelligence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; color: #333; }
+        .container { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; overflow-y: auto; }
+        .sidebar-logo { font-size: 32px; margin-bottom: 10px; }
+        .sidebar-title { font-size: 14px; font-weight: 600; margin-bottom: 30px; opacity: 0.9; }
+        .nav-group { margin-bottom: 30px; }
+        .nav-title { font-size: 12px; text-transform: uppercase; opacity: 0.7; margin-bottom: 12px; }
+        .nav-item { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: block; color: white; }
+        .nav-item:hover { background: rgba(255, 255, 255, 0.2); }
+        .nav-item.active { background: rgba(255, 255, 255, 0.3); font-weight: 600; }
+        .user-section { border-top: 1px solid rgba(255, 255, 255, 0.2); padding-top: 20px; margin-top: 30px; }
+        .user-info { margin-bottom: 15px; }
+        .user-name { font-weight: 600; font-size: 14px; }
+        .user-role { font-size: 12px; opacity: 0.8; margin-top: 3px; }
+        .logout-btn { width: 100%; padding: 10px; background: rgba(255, 255, 255, 0.2); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .logout-btn:hover { background: rgba(255, 255, 255, 0.3); }
+        .main { flex: 1; padding: 40px; overflow-y: auto; }
+        .header { margin-bottom: 40px; }
+        .header h1 { font-size: 32px; color: #333; }
+        .header-subtitle { color: #666; margin-top: 5px; }
+        
+        .upload-area {
+            background: white;
+            border-radius: 20px;
+            padding: 60px;
+            text-align: center;
+            border: 3px dashed #667eea;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 30px;
+        }
+        .upload-area:hover { border-color: #764ba2; background: #f8f9ff; }
+        .upload-icon { font-size: 64px; margin-bottom: 20px; }
+        .upload-text { font-size: 18px; color: #666; margin-bottom: 10px; }
+        .upload-subtext { font-size: 14px; color: #999; }
+        
+        .btn { padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 16px; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4); }
+        
+        .result-card { background: white; border-radius: 15px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .result-title { font-size: 20px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .result-content { font-size: 15px; line-height: 1.8; white-space: pre-wrap; }
+        
+        .loading { display: none; text-align: center; padding: 40px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .info-box { background: #e7f3ff; border-left: 4px solid #667eea; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .info-title { font-weight: 600; margin-bottom: 10px; }
+        .info-list { margin: 0; padding-left: 20px; }
+        .info-list li { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-logo">💳</div>
+            <div class="sidebar-title">ParisCred Intelligence</div>
+            
+            <div class="nav-group">
+                <div class="nav-title">Menu Principal</div>
+                <a href="/dashboard" class="nav-item">📊 Dashboard</a>
+                <a href="/crm" class="nav-item">👥 CRM</a>
+                <a href="/campanhas" class="nav-item">📧 Campanhas</a>
+                <a href="/financeiro" class="nav-item">💰 Financeiro</a>
+                <a href="/importar" class="nav-item">📊 Importar Leads</a>
+                <a href="/coach" class="nav-item">🤖 Chat IA Coach</a>
+                <a href="/extrato" class="nav-item active">📄 Análise Extrato</a>
+            </div>
+            
+            <div class="nav-group" id="admin-menu" style="display:none;">
+                <div class="nav-title">Administração</div>
+                <a href="/admin" class="nav-item">⚙️ Painel ADM</a>
+            </div>
+            
+            <div class="user-section">
+                <div class="user-info">
+                    <div class="user-name" id="user-name">Carregando...</div>
+                    <div class="user-role" id="user-role">Loading...</div>
+                </div>
+                <button class="logout-btn" onclick="logout()">🚪 Sair</button>
+            </div>
+        </div>
+        
+        <div class="main">
+            <div class="header">
+                <h1>📄 Análise de Extrato PDF</h1>
+                <div class="header-subtitle">Envie o extrato do cliente e a IA analisa automaticamente</div>
+            </div>
+            
+            <div class="info-box">
+                <div class="info-title">O que a IA analisa:</div>
+                <ul class="info-list">
+                    <li>Contratos ativos e valores de parcela</li>
+                    <li>Oportunidades de portabilidade</li>
+                    <li>Contratos próximos a quitar</li>
+                    <li>Sugestões de economia</li>
+                    <li>Score do cliente (0-100)</li>
+                </ul>
+            </div>
+            
+            <div class="upload-area" onclick="document.getElementById('file-input').click()">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Clique para selecionar ou arraste o arquivo PDF</div>
+                <div class="upload-subtext">Formatos aceitos: .pdf</div>
+                <input type="file" id="file-input" accept=".pdf" style="display: none;" onchange="uploadFile(this)">
+            </div>
+            
+            <button class="btn" onclick="document.getElementById('file-input').click()">
+                📄 Selecionar Arquivo PDF
+            </button>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Analisando extrato com IA...</div>
+                <div style="margin-top: 10px; color: #666;">Isso pode levar alguns segundos</div>
+            </div>
+            
+            <div id="result-area" style="display: none; margin-top: 30px;">
+                <div class="result-card">
+                    <div class="result-title">📊 Resultado da Análise</div>
+                    <div class="result-content" id="result-content"></div>
+                </div>
+                
+                <button class="btn" onclick="limpar()">🔄 Analisar Outro Extrato</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        fetch('/api/usuario')
+            .then(r => r.json())
+            .then(user => {
+                document.getElementById('user-name').textContent = user.nome;
+                document.getElementById('user-role').textContent = user.role === 'admin' ? '👑 Administrador' : '📱 Vendedor';
+                if (user.role === 'admin') document.getElementById('admin-menu').style.display = 'block';
+            });
+        
+        function uploadFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Por favor, selecione um arquivo PDF');
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result-area').style.display = 'none';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/api/extrato/analisar', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('result-area').style.display = 'block';
+                
+                if (data.sucesso) {
+                    document.getElementById('result-content').textContent = data.analise;
+                } else {
+                    document.getElementById('result-content').textContent = 'Erro: ' + (data.erro || 'Erro desconhecido');
+                }
+            })
+            .catch(err => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('result-area').style.display = 'block';
+                document.getElementById('result-content').textContent = 'Erro: ' + err.message;
+            });
+        }
+        
+        function limpar() {
+            document.getElementById('result-area').style.display = 'none';
+            document.getElementById('file-input').value = '';
+        }
+        
+        function logout() {
+            window.location = '/logout';
+        }
+    </script>
+</body>
+</html>

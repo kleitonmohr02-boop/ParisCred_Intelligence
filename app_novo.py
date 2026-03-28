@@ -409,6 +409,79 @@ def pagina_coach():
     return render_template('coach.html', usuario=usuario_para_json(usuario))
 
 
+@app.route('/extrato')
+@requer_login
+def pagina_extrato():
+    """Página de Análise de Extrato"""
+    usuario = obter_usuario_atual()
+    return render_template('extrato.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/api/extrato/analisar', methods=['POST'])
+@requer_login
+def api_analisar_extrato():
+    """API para analisar extrato PDF"""
+    from modulo_ia import agente_ia, ia_fallback
+    
+    if 'file' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
+    
+    arquivo = request.files['file']
+    
+    if not arquivo.filename.endswith('.pdf'):
+        return jsonify({'erro': 'Arquivo deve ser PDF'}), 400
+    
+    try:
+        # Ler PDF
+        import PyPDF2
+        import tempfile
+        
+        temp_path = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        arquivo.save(temp_path.name)
+        
+        with open(temp_path.name, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            texto = ""
+            for page in reader.pages:
+                texto += page.extract_text() or ""
+        
+        # Limitar texto se muito grande
+        if len(texto) > 8000:
+            texto = texto[:8000] + "..."
+        
+        # Enviar para IA
+        prompt = f"""Analise este extrato de crédito consignado e identifique:
+
+1. Todos os contratos ativos (banco, parcela, prazo, valor total)
+2. Valor total de desconto mensal
+3. Oportunidades de portabilidade (se há contratos com taxas altas)
+4. Contratos que vão liberar em breve (próximos a quitar)
+5. Sugestão de economia
+6. Score do cliente (0-100 baseado na situação)
+
+Extrato:
+{texto}
+
+Responda em português brasileiro, de forma clara e objetiva."""
+
+        try:
+            resposta = agente_ia.gerar_resposta(prompt, {'nome': 'Cliente'})
+            if resposta:
+                return jsonify({'sucesso': True, 'analise': resposta})
+        except Exception as e:
+            logger.warning(f"Erro Gemini: {e}")
+        
+        # Fallback
+        return jsonify({
+            'sucesso': True, 
+            'analise': 'Analise do extrato:\n\n• Contratos encontrados: Verificar manualmente\n• Total desconto: Verificar extrato\n• Recomendação: Entre em contato para análise detalhada'
+        })
+        
+    except Exception as e:
+        logger.error(f"Erro ao analisar extrato: {e}")
+        return jsonify({'erro': f'Erro ao processar PDF: {str(e)}'}), 500
+
+
 @app.route('/api/coach/chat', methods=['POST'])
 @requer_login
 def api_coach_chat():
