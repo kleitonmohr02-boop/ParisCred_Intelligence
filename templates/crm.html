@@ -192,12 +192,14 @@
     <script>
         let todosClientes = [];
         let filtroAtual = 'todos';
+        let nomeVendedor = 'Vendedor';
         
         fetch('/api/usuario')
             .then(r => r.json())
             .then(user => {
                 document.getElementById('user-name').textContent = user.nome;
                 document.getElementById('user-role').textContent = user.role === 'admin' ? '👑 Administrador' : '📱 Vendedor';
+                nomeVendedor = user.nome;
                 if (user.role === 'admin') document.getElementById('admin-menu').style.display = 'block';
             });
         
@@ -257,7 +259,7 @@
                     </div>
                     <span class="badge badge-${c.status || 'lead'}">${getLabelStatus(c.status)}</span>
                     <div class="cliente-actions">
-                        <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}')">💬</button>
+                        <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}', '${c.nome}', '${c.margem_consignavel || 0}')">💬</button>
                         <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
                     </div>
                 </div>
@@ -318,7 +320,100 @@
             });
         }
         
-        function enviarWhatsapp(phone) {
+        // Templates de mensagem para Crédito Consignado
+        const templatesWhatsApp = {
+            'ola': {
+                titulo: 'Olá - Primeira Mensagem',
+                texto: 'Olá! 👋 Sou *{vendedor}* da *Paris Cred*, especializada em crédito consignado. Vi que você tem uma excelente oportunidade de crédito disponível. Posso te ajudar a encontrar as melhores condições do mercado!'
+            },
+            'qualificacao': {
+                titulo: 'Qualificação',
+                texto: 'Para eu poder te ajudar da melhor forma, me informe:\n\n✅ Seu CPF (para verificar a margem)\n✅ Qual banco recebe seu benefício\n✅ Quanto você quer emprestar\n✅ Para que vai usar o dinheiro\n\nCom essas informações, faço uma simulação gratuita e sem compromisso! 😊'
+            },
+            'proposta': {
+                titulo: 'Apresentar Proposta',
+                texto: '{nome}, 根据 sua margem de R$ {margem}, preparei uma proposta especial:\n\n💰 Valor: R$ {valor}\n📅 Parcelas: {parcelas}x de R$ {parcela}\n💵 Total a receber: R$ {liquido}\n🏦 Taxa: {taxa}% ao mês\n\nQuer que eu detalhe mais ou podemos avançar?'
+            },
+            'followup': {
+                titulo: 'Follow-up',
+                texto: 'Olá {nome}! 👋\n\nSegue o resumo da proposta que te enviei:\n\n💰 Valor: R$ {valor}\n📅 Parcelas: {parcelas}x\n\nEssa condição é válida até {data}. Qualquer dúvida, me chama!\n\nAbs,\n{vendedor}'
+            },
+            'obrigado': {
+                titulo: 'Obrigado',
+                texto: 'Obrigado {nome}! 🙏\n\nFoi um prazer te ajudar. Qualquer dúvida sobre crédito consignado, estou à disposição.\n\nSucesso! 🚀\n\n{vendedor}'
+            }
+        };
+        
+        function enviarWhatsapp(phone, nomeCliente = '', margem = '') {
+            if (!phone) return;
+            
+            const phoneLimpo = phone.replace(/\D/g, '');
+            
+            // Criar menu de templates
+            let menuHTML = `
+                <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;justify-content:center;align-items:center;">
+                    <div style="background:white;padding:20px;border-radius:15px;max-width:400px;width:90%;">
+                        <h3 style="margin-bottom:15px;color:#333;">📱 Escolha um Template</h3>
+                        <p style="margin-bottom:15px;color:#666;font-size:14px;">Cliente: ${nomeCliente || 'Cliente'}</p>
+            `;
+            
+            // Adicionar cada template como opção
+            for (const [key, template] of Object.entries(templatesWhatsApp)) {
+                menuHTML += `
+                    <button onclick="selecionarTemplate('${key}', '${phoneLimpo}', '${nomeCliente}', '${margem}')"
+                            style="width:100%;padding:12px;margin-bottom:10px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;cursor:pointer;text-align:left;font-size:14px;">
+                        ${template.titulo}
+                    </button>
+                `;
+            }
+            
+            menuHTML += `
+                <button onclick="document.getElementById('menu-whatsapp').remove()"
+                        style="width:100%;padding:12px;background:#ff5252;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;">
+                    Cancelar
+                </button>
+                    </div>
+                </div>
+            `;
+            
+            // Remover menu anterior se existir
+            const menuAntigo = document.getElementById('menu-whatsapp');
+            if (menuAntigo) menuAntigo.remove();
+            
+            // Adicionar menu
+            const div = document.createElement('div');
+            div.id = 'menu-whatsapp';
+            div.innerHTML = menuHTML;
+            document.body.appendChild(div);
+        }
+        
+        function selecionarTemplate(key, phone, nome, margem) {
+            const template = templatesWhatsApp[key];
+            
+            // Substituir variáveis
+            let texto = template.texto
+                .replace(/{nome}/g, nome || 'Cliente')
+                .replace(/{vendedor}/g, vendedor)
+                .replace(/{margem}/g, margem || '0')
+                .replace(/{valor}/g, '10.000')
+                .replace(/{parcelas}/g, '48')
+                .replace(/{parcela}/g, '280')
+                .replace(/{liquido}/g, '9.500')
+                .replace(/{taxa}/g, '1,89')
+                .replace(/{data}/g, new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString('pt-BR'));
+            
+            // Codificar para URL
+            const textoEncoded = encodeURIComponent(texto);
+            
+            // Abrir WhatsApp com mensagem
+            window.open(`https://wa.me/${phone}?text=${textoEncoded}`, '_blank');
+            
+            // Fechar menu
+            document.getElementById('menu-whatsapp').remove();
+        }
+        
+        // Função original para compatibilidade
+        function enviarWhatsappSimples(phone) {
             if (phone) {
                 window.open(`https://wa.me/${phone.replace(/\D/g,'')}`, '_blank');
             }
