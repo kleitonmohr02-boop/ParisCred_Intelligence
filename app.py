@@ -1032,6 +1032,7 @@ def not_found(e):
 
 
 @app.route('/api/admin/seed', methods=['GET', 'POST'])
+@requer_admin
 def api_seed_dados():
     """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
     # if os.getenv('FLASK_ENV') == 'production':
