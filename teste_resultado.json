@@ -1,0 +1,104 @@
+[
+  {
+    "nome": "Pagina Inicial",
+    "rota": "/",
+    "status": 302,
+    "sucesso": true
+  },
+  {
+    "nome": "Login Page",
+    "rota": "/login",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Login Admin",
+    "rota": "/login",
+    "status": 302,
+    "sucesso": true
+  },
+  {
+    "nome": "Dashboard",
+    "rota": "/dashboard",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina CRM",
+    "rota": "/crm",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "API Leads",
+    "rota": "/api/crm/leads",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Criar Cliente",
+    "rota": "/api/crm/clientes",
+    "status": 201,
+    "sucesso": true
+  },
+  {
+    "nome": "Update Status",
+    "rota": "/api/crm/update_status",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Financeiro",
+    "rota": "/financeiro",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina WhatsApp",
+    "rota": "/whatsapp",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Campanhas",
+    "rota": "/campanhas",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Importar",
+    "rota": "/importar",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Coach",
+    "rota": "/coach",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Extrato",
+    "rota": "/extrato",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Admin",
+    "rota": "/admin",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Pagina Dashboard",
+    "rota": "/dashboard",
+    "status": 200,
+    "sucesso": true
+  },
+  {
+    "nome": "Logout",
+    "rota": "/logout",
+    "status": 302,
+    "sucesso": true
+  }
+]

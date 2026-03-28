@@ -12,8 +12,10 @@ from skill_crm import ClientesDB
 from skill_financeiro import FinanceiroDB
 from skill_whatsapp import WhatsAppDB
 from skill_admin import AdminReportsDB
-from mcp_evolution import evolution_mcp
-from mcp_database import db_mcp
+
+# MCP modules - comentario temporario ate implementar
+# from mcp_evolution import evolution_mcp
+# from mcp_database import db_mcp
 
 # Decorator de proteção
 def protected(f):

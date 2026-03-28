@@ -841,6 +841,14 @@ def api_campanhas_progresso():
     return jsonify(DISPAROS_ATIVOS)
 
 
+@app.route('/whatsapp')
+@requer_login
+def whatsapp():
+    """Página de administração do WhatsApp"""
+    usuario = obter_usuario_atual()
+    return render_template('whatsapp_admin.html', usuario=usuario_para_json(usuario))
+
+
 @app.route('/api/whatsapp/status')
 @requer_login
 def whatsapp_status():
