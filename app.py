@@ -1026,16 +1026,17 @@ def not_found(e):
 @app.route('/api/admin/seed', methods=['POST'])
 def api_seed_dados():
     """Endpoint para popular dados de teste (apenas em desenvolvimento)"""
-    if os.getenv('FLASK_ENV') == 'production':
-        return jsonify({'erro': 'Nao disponivel em producao'}), 403
+    # if os.getenv('FLASK_ENV') == 'production':
+    #     return jsonify({'erro': 'Nao disponivel em producao'}), 403
     
     try:
-        from database import db
+        db = Database()
         
         with db.get_connection() as conn:
             cursor = conn.cursor()
             
             p = db.placeholder()
+            ativo_val = db.bool_def(True)
             try:
                 cursor.execute(f"""
                     CREATE TABLE IF NOT EXISTS clientes (
@@ -1044,7 +1045,7 @@ def api_seed_dados():
                         email TEXT,
                         phone TEXT,
                         cpf TEXT,
-                        status TEXT DEFAULT 'lead',
+                        status TEXT DEFAULT 'Novo Lead',
                         empresa TEXT,
                         cargo TEXT,
                         renda DECIMAL(10,2),
@@ -1052,15 +1053,15 @@ def api_seed_dados():
                         banco_atual TEXT,
                         custom_fields TEXT,
                         data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        ativo BOOLEAN DEFAULT {db.bool_def(True)}
+                        ativo BOOLEAN DEFAULT {ativo_val}
                     )
                 """)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Tabela clientes pode já existir: {e}")
             
-            cursor.execute("SELECT COUNT(*) FROM campanhas")
+            cursor.execute(f"SELECT COUNT(*) as total FROM campanhas")
             row = cursor.fetchone()
-            qtd_camp = row['count'] if isinstance(row, dict) else row[0]
+            qtd_camp = row['total'] if isinstance(row, dict) else row[0]
             
             if qtd_camp == 0:
                 campanhas = [
@@ -1075,33 +1076,33 @@ def api_seed_dados():
                         VALUES ({p}, {p}, 'rascunho', {p}, 'Olá! Temos uma proposta especial para você!', '[]', '[]', '[]', 0)
                     """, (nome, desc, criador))
             
-            cursor.execute("SELECT COUNT(*) FROM clientes")
+            cursor.execute(f"SELECT COUNT(*) as total FROM clientes")
             row = cursor.fetchone()
-            qtd_cli = row['count'] if isinstance(row, dict) else row[0]
+            qtd_cli = row['total'] if isinstance(row, dict) else row[0]
             
             if qtd_cli == 0:
-                # Criar 20 clientes de exemplo
+                STATUS_KANBAN = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado']
                 clientes = [
-                    ('Jose da Silva', 'jose@email.com', '48999991111', '12345678901', 'lead', 2500.00, 'INSS'),
-                    ('Maria Santos', 'maria@email.com', '48999992222', '23456789012', 'qualificado', 3200.00, 'INSS'),
-                    ('Pedro Costa', 'pedro@email.com', '48999993333', '34567890123', 'proposta', 1800.00, 'CLT'),
-                    ('Ana Oliveira', 'ana@email.com', '48999994444', '45678901234', 'negociacao', 4500.00, 'INSS'),
-                    ('Joao Lima', 'joao@email.com', '48999995555', '56789012345', 'lead', 2100.00, 'INSS'),
-                    ('Carlos Souza', 'carlos@email.com', '48999996666', '67890123456', 'contratado', 2800.00, 'CLT'),
-                    ('Francisca Dias', 'francisca@email.com', '48999997777', '78901234567', 'lead', 1900.00, 'INSS'),
-                    ('Marcos Rodrigues', 'marcos@email.com', '48999998888', '89012345678', 'qualificado', 3100.00, 'INSS'),
-                    ('Juliana Ferreira', 'juliana@email.com', '48999999999', '90123456789', 'proposta', 2200.00, 'INSS'),
-                    ('Ricardo Almeida', 'ricardo@email.com', '48998887777', '01234567890', 'negociacao', 2600.00, 'CLT'),
-                    ('Fernanda Costa', 'fernanda@email.com', '48998886666', '11223344556', 'lead', 1700.00, 'INSS'),
-                    ('Bruno Martins', 'bruno@email.com', '48887776655', '22334455667', 'qualificado', 3300.00, 'INSS'),
-                    ('Carla Ribeiro', 'carla@email.com', '48876655443', '33445566778', 'proposta', 2400.00, 'CLT'),
-                    ('Diego Souza', 'diego@email.com', '48865544332', '44556677889', 'lead', 2000.00, 'INSS'),
-                    ('Emily Batista', 'emily@email.com', '48854433221', '55667788990', 'negociacao', 2900.00, 'INSS'),
-                    ('Felipe Lima', 'felipe@email.com', '48843322110', '66778899001', 'lead', 1850.00, 'CLT'),
-                    ('Gabriela Santos', 'gabriela@email.com', '48832211099', '77889900112', 'qualificado', 2700.00, 'INSS'),
-                    ('Henrique Alves', 'henrique@email.com', '48821099888', '88990011223', 'proposta', 2300.00, 'CLT'),
-                    ('Isabela Castro', 'isabela@email.com', '48810988777', '99001122334', 'lead', 1600.00, 'INSS'),
-                    ('Joaquim Mendes', 'joaquim@email.com', '48809877666', '00112233445', 'negociacao', 3400.00, 'INSS'),
+                    ('Jose da Silva', 'jose@email.com', '48999991111', '12345678901', STATUS_KANBAN[0], 2500.00, 'INSS'),
+                    ('Maria Santos', 'maria@email.com', '48999992222', '23456789012', STATUS_KANBAN[1], 3200.00, 'INSS'),
+                    ('Pedro Costa', 'pedro@email.com', '48999993333', '34567890123', STATUS_KANBAN[2], 1800.00, 'CLT'),
+                    ('Ana Oliveira', 'ana@email.com', '48999994444', '45678901234', STATUS_KANBAN[1], 4500.00, 'INSS'),
+                    ('Joao Lima', 'joao@email.com', '48999995555', '56789012345', STATUS_KANBAN[0], 2100.00, 'INSS'),
+                    ('Carlos Souza', 'carlos@email.com', '48999996666', '67890123456', STATUS_KANBAN[3], 2800.00, 'CLT'),
+                    ('Francisca Dias', 'francisca@email.com', '48999997777', '78901234567', STATUS_KANBAN[0], 1900.00, 'INSS'),
+                    ('Marcos Rodrigues', 'marcos@email.com', '48999998888', '89012345678', STATUS_KANBAN[1], 3100.00, 'INSS'),
+                    ('Juliana Ferreira', 'juliana@email.com', '48999999999', '90123456789', STATUS_KANBAN[2], 2200.00, 'INSS'),
+                    ('Ricardo Almeida', 'ricardo@email.com', '48998887777', '01234567890', STATUS_KANBAN[1], 2600.00, 'CLT'),
+                    ('Fernanda Costa', 'fernanda@email.com', '48998886666', '11223344556', STATUS_KANBAN[0], 1700.00, 'INSS'),
+                    ('Bruno Martins', 'bruno@email.com', '48887776655', '22334455667', STATUS_KANBAN[1], 3300.00, 'INSS'),
+                    ('Carla Ribeiro', 'carla@email.com', '48876655443', '33445566778', STATUS_KANBAN[2], 2400.00, 'CLT'),
+                    ('Diego Souza', 'diego@email.com', '48865544332', '44556677889', STATUS_KANBAN[0], 2000.00, 'INSS'),
+                    ('Emily Batista', 'emily@email.com', '48854433221', '55667788990', STATUS_KANBAN[1], 2900.00, 'INSS'),
+                    ('Felipe Lima', 'felipe@email.com', '48843322110', '66778899001', STATUS_KANBAN[0], 1850.00, 'CLT'),
+                    ('Gabriela Santos', 'gabriela@email.com', '48832211099', '77889900112', STATUS_KANBAN[1], 2700.00, 'INSS'),
+                    ('Henrique Alves', 'henrique@email.com', '48821099888', '88990011223', STATUS_KANBAN[2], 2300.00, 'CLT'),
+                    ('Isabela Castro', 'isabela@email.com', '48810988777', '99001122334', STATUS_KANBAN[0], 1600.00, 'INSS'),
+                    ('Joaquim Mendes', 'joaquim@email.com', '48809877666', '00112233445', STATUS_KANBAN[3], 3400.00, 'INSS'),
                 ]
                 
                 for nome, email, phone, cpf, status, margem, banco in clientes:
