@@ -7,6 +7,20 @@ services:
     startCommand: gunicorn app_novo:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11
+        value: "3.11"
       - key: FLASK_ENV
         value: production
+      - key: FLASK_APP
+        value: app_novo.py
+      - key: SECRET_KEY
+        value: pc_2025_pariscred_secure_key_xyz123
+      - key: DATABASE_PATH
+        value: app.db
+      - key: EVOLUTION_API_URL
+        value: https://evolution.pariscred.com.br
+      - key: EVOLUTION_API_KEY
+        value: CONSIGNADO123
+      - key: EVOLUTION_INSTANCE_NAME
+        value: ParisCred_01
+      - key: LOG_LEVEL
+        value: INFO

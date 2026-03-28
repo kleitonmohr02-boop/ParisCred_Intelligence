@@ -11,30 +11,33 @@ import json
 from datetime import datetime
 import secrets
 import os
+import logging
 
-# ============================================================
-# CONFIGURAÇÃO INICIAL
-# ============================================================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 CORS(app)
 
-# ============================================================
-# CONFIGURAÇÃO EVOLUTION API
-# ============================================================
-EVOLUTION_API_URL = "http://localhost:8080"
-EVOLUTION_API_KEY = "CONSIGNADO123"
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://localhost:8080")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "CONSIGNADO123")
 EVOLUTION_HEADERS = {
     "Content-Type": "application/json",
     "apikey": EVOLUTION_API_KEY
 }
 
-# ============================================================
-# DATABASE SIMULADO (Será expandido com Firebase)
-# ============================================================
+try:
+    from database import Database, UsuariosDB, CampanhasDB, HistoricoDB
+    logger.info("[OK] Banco de dados integrado")
+    USANDO_BANCO = True
+except Exception as e:
+    logger.error(f"[ERRO] Banco de dados NAO importado: {e}")
+    USANDO_BANCO = False
 
-# Usuários do sistema
 USUARIOS = {
     'admin@pariscred.com': {
         'senha': 'Admin@2025',
@@ -302,7 +305,24 @@ def obter_usuario_atual():
     """Retorna dados do usuário logado"""
     if 'usuario' not in session:
         return None
-    return USUARIOS.get(session['usuario'])
+    
+    email = session['usuario']
+    
+    if USANDO_BANCO:
+        try:
+            usuario = UsuariosDB.obter(email)
+            if usuario:
+                return {
+                    'email': usuario['email'],
+                    'nome': usuario['nome'],
+                    'role': usuario['role'],
+                    'criado_em': usuario['criado_em'],
+                    'ativo': usuario['ativo']
+                }
+        except Exception as e:
+            logger.error(f"[USUARIO] Erro ao buscar do banco: {e}")
+    
+    return USUARIOS.get(email)
 
 # ============================================================
 # ROTAS PÚBLICAS (Auth)
@@ -322,10 +342,21 @@ def login():
         email = request.form.get('email', '').lower()
         senha = request.form.get('senha', '')
         
-        usuario = USUARIOS.get(email)
+        if USANDO_BANCO:
+            try:
+                if UsuariosDB.verificar_senha(email, senha):
+                    usuario = UsuariosDB.obter(email)
+                    if usuario and usuario.get('ativo'):
+                        session['usuario'] = email
+                        logger.info(f"[LOGIN] Usuario {email} logado com sucesso (BD)")
+                        return redirect(url_for('dashboard'))
+            except Exception as e:
+                logger.error(f"[LOGIN] Erro ao verificar usuario no banco: {e}")
         
+        usuario = USUARIOS.get(email)
         if usuario and usuario['senha'] == senha and usuario['ativo']:
             session['usuario'] = email
+            logger.info(f"[LOGIN] Usuario {email} logado (modo demonstração)")
             return redirect(url_for('dashboard'))
         
         return render_template('login.html', erro='Email ou senha incorretos')
@@ -367,8 +398,29 @@ def api_stats():
     """Retorna estatísticas do usuário/sistema"""
     usuario = obter_usuario_atual()
     
+    if USANDO_BANCO:
+        try:
+            if usuario['role'] == 'admin':
+                usuarios = UsuariosDB.listar_todos()
+                campanhas = CampanhasDB.listar_todas()
+                return jsonify({
+                    'total_usuarios': len(usuarios),
+                    'total_campanhas': len(campanhas),
+                    'total_disparos': 0,
+                    'usuarios_ativos': sum(1 for u in usuarios if u.get('ativo', True)),
+                    'campanhas_ativas': sum(1 for c in campanhas if c.get('status') == 'ativo')
+                })
+            else:
+                campanhas = CampanhasDB.listar_por_criador(session['usuario'])
+                return jsonify({
+                    'total_campanhas': len(campanhas),
+                    'total_disparos': sum(c.get('total_enviados', 0) for c in campanhas),
+                    'campanhas_ativas': sum(1 for c in campanhas if c.get('status') == 'ativo')
+                })
+        except Exception as e:
+            logger.error(f"[STATS] Erro ao buscar stats: {e}")
+    
     if usuario['role'] == 'admin':
-        # Estatísticas ADM
         return jsonify({
             'total_usuarios': len(USUARIOS),
             'total_campanhas': len(CAMPANHAS),
@@ -377,7 +429,6 @@ def api_stats():
             'campanhas_ativas': sum(1 for c in CAMPANHAS.values() if c['status'] == 'ativo')
         })
     else:
-        # Estatísticas do vendedor
         campanhas_users = [c for c in CAMPANHAS.values() if c['criador'] == session['usuario']]
         return jsonify({
             'total_campanhas': len(campanhas_users),
@@ -403,17 +454,71 @@ def api_campanhas():
     usuario = obter_usuario_atual()
     
     if request.method == 'GET':
-        # Listar campanhas
-        if usuario['role'] == 'admin':
-            lista = list(CAMPANHAS.values())
-        else:
-            lista = [c for c in CAMPANHAS.values() if c['criador'] == session['usuario']]
+        lista = []
+        
+        if USANDO_BANCO:
+            try:
+                if usuario['role'] == 'admin':
+                    campanhas = CampanhasDB.listar_todas()
+                else:
+                    campanhas = CampanhasDB.listar_por_criador(session['usuario'])
+                
+                for c in campanhas:
+                    lista.append({
+                        'id': c['id'],
+                        'nome': c['nome'],
+                        'descricao': c['descricao'],
+                        'status': c['status'],
+                        'criador': c['criador'],
+                        'beneficiarios': c.get('beneficiarios_json', []),
+                        'mensagem': c['mensagem'],
+                        'botoes': c.get('botoes_json', []),
+                        'instancias': c.get('instancias_json', []),
+                        'criado_em': c['criado_em'],
+                        'disparado_em': c.get('disparado_em'),
+                        'total_enviados': c.get('total_enviados', 0)
+                    })
+            except Exception as e:
+                logger.error(f"[CAMPANHAS] Erro ao buscar do banco: {e}")
+        
+        if not lista:
+            if usuario['role'] == 'admin':
+                lista = list(CAMPANHAS.values())
+            else:
+                lista = [c for c in CAMPANHAS.values() if c['criador'] == session['usuario']]
         
         return jsonify(lista)
     
     elif request.method == 'POST':
-        # Criar nova campanha
         data = request.json
+        
+        if USANDO_BANCO:
+            try:
+                camp_id = CampanhasDB.criar(
+                    nome=data.get('nome', 'Nova Campanha'),
+                    descricao=data.get('descricao', ''),
+                    criador=session['usuario'],
+                    mensagem=data.get('mensagem', ''),
+                    beneficiarios=data.get('beneficiarios', []),
+                    botoes=data.get('botoes', []),
+                    instancias=data.get('instancias', ['Paris_01'])
+                )
+                
+                campanha = CampanhasDB.obter(camp_id)
+                logger.info(f"[CAMPANHA] Criada via BD: {camp_id}")
+                
+                return jsonify({
+                    'sucesso': True,
+                    'mensagem': f'Campanha "{data.get("nome")}" criada com sucesso!',
+                    'campanha': {
+                        'id': camp_id,
+                        'nome': data.get('nome'),
+                        'status': 'rascunho',
+                        'criador': session['usuario']
+                    }
+                }), 201
+            except Exception as e:
+                logger.error(f"[CAMPANHA] Erro ao criar no banco: {e}")
         
         camp_id = f"camp{len(CAMPANHAS) + 1:03d}"
         
@@ -553,23 +658,56 @@ def api_admin_usuarios():
     """Gerenciar usuários (apenas ADM)"""
     
     if request.method == 'GET':
-        # Listar usuários
         usuarios = []
-        for email, dados in USUARIOS.items():
-            usuarios.append({
-                'email': email,
-                'nome': dados['nome'],
-                'role': dados['role'],
-                'ativo': dados['ativo'],
-                'criado_em': dados['criado_em']
-            })
+        
+        if USANDO_BANCO:
+            try:
+                for u in UsuariosDB.listar_todos():
+                    usuarios.append({
+                        'email': u['email'],
+                        'nome': u['nome'],
+                        'role': u['role'],
+                        'ativo': u['ativo'],
+                        'criado_em': u['criado_em']
+                    })
+            except Exception as e:
+                logger.error(f"[ADMIN USUARIOS] Erro ao buscar usuarios: {e}")
+        
+        if not usuarios:
+            for email, dados in USUARIOS.items():
+                usuarios.append({
+                    'email': email,
+                    'nome': dados['nome'],
+                    'role': dados['role'],
+                    'ativo': dados['ativo'],
+                    'criado_em': dados['criado_em']
+                })
+        
         return jsonify(usuarios)
     
     elif request.method == 'POST':
-        # Criar novo usuário
         data = request.json
-        
         email = data.get('email', '').lower()
+        
+        if USANDO_BANCO:
+            try:
+                sucesso = UsuariosDB.criar(
+                    email=email,
+                    nome=data.get('nome', 'Novo Usuário'),
+                    senha=data.get('senha', 'Temp@123'),
+                    role=data.get('role', 'vendedor')
+                )
+                if sucesso:
+                    logger.info(f"[ADMIN] Usuario criado: {email}")
+                    return jsonify({
+                        'sucesso': True,
+                        'mensagem': f'Usuário {data.get("nome")} criado com sucesso!',
+                        'usuario': {'email': email, 'nome': data.get('nome'), 'role': data.get('role', 'vendedor')}
+                    }), 201
+                return jsonify({'erro': 'Erro ao criar usuário'}), 500
+            except Exception as e:
+                logger.error(f"[ADMIN] Erro ao criar usuario: {e}")
+                return jsonify({'erro': str(e)}), 500
         
         if email in USUARIOS:
             return jsonify({'erro': 'Email já cadastrado'}), 400
@@ -1056,6 +1194,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
+        'banco_integrado': USANDO_BANCO,
         'usuarios': len(USUARIOS),
         'campanhas': len(CAMPANHAS)
     })
@@ -1080,7 +1219,10 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print(" PARISCRED INTELLIGENCE - SaaS COMPLETO")
     print("="*70)
-    print(f"\n [SUCCESS] Servidor iniciando na porta 5000...")
+    
+    modo = "BANCO DE DADOS" if USANDO_BANCO else "MODO DEMONSTRACAO"
+    print(f"\n [INFO] Modo: {modo}")
+    print(f" [SUCCESS] Servidor iniciando na porta 5000...")
     print(f" [SUCCESS] Acessar em: http://localhost:5000")
     print(f"\n [INFO] Contas de Teste:")
     print(f"   ADM: admin@pariscred.com / Admin@2025")
