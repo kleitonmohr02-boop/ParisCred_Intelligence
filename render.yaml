@@ -16,6 +16,8 @@ services:
         value: pc_2025_pariscred_secure_key_xyz123
       - key: DATABASE_PATH
         value: app.db
+      - key: DATABASE_URL
+        value: ""
       - key: EVOLUTION_API_URL
         value: http://localhost:8080
       - key: EVOLUTION_API_KEY
