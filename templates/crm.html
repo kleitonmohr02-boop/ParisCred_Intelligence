@@ -327,7 +327,7 @@
                     </div>
                     <span class="badge badge-${(c.status || 'Novo Lead').toLowerCase().replace(/ /g, '-')}">${getLabelStatus(c.status)}</span>
                     <div class="cliente-actions">
-                        <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}', '${c.nome}', '${c.margem_consignavel || 0}')">💬</button>
+                        ${c.phone ? `<a href="https://wa.me/55${c.phone.replace(/\\D/g,'')}?text=Olá+${encodeURIComponent(c.nome || '')}+vim+falar+sobre+crédito+consignado!" target="_blank" class="btn-small btn-whatsapp" style="text-decoration:none;display:inline-block;">💬</a>` : ''}
                         <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
                     </div>
                 </div>
@@ -365,7 +365,7 @@
                                 ${c.margem_consignavel ? `<span>💰 R$ ${parseFloat(c.margem_consignavel).toFixed(2)}</span>` : ''}
                             </div>
                             <div class="k-card-actions">
-                                <button class="btn-small btn-whatsapp" onclick="enviarWhatsapp('${c.phone}', '${c.nome}', '${c.margem_consignavel || 0}')">💬</button>
+                                ${c.phone ? `<a href="https://wa.me/55${c.phone.replace(/\\D/g,'')}?text=Olá+${encodeURIComponent(c.nome || '')}+vim+falar+sobre+crédito+consignado!" target="_blank" class="btn-small btn-whatsapp" style="text-decoration:none;display:inline-block;">💬</a>` : ''}
                                 <button class="btn-small btn-simular" onclick="simularEmprestimo(${c.id})">🧮</button>
                             </div>
                         </div>

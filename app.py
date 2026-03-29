@@ -14,8 +14,6 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 from flask_cors import CORS
 from datetime import datetime
 import secrets
-import threading
-import time
 
 # Importar funções do database
 from database import (
@@ -150,16 +148,6 @@ try:
 except ImportError as e:
     logger.warning(f"Módulo importação não disponível: {e}")
 
-# Registrar rotas anti-ban
-try:
-    from modulo_antiban import criar_rotas_antiban
-    criar_rotas_antiban(app)
-except ImportError as e:
-    logger.warning(f"Módulo anti-ban não disponível: {e}")
-
-# Controle de disparos em segundo plano
-DISPAROS_ATIVOS = {}
-
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
@@ -230,94 +218,6 @@ def campanha_para_json(campanha):
         'disparado_em': campanha['disparado_em'],
         'total_enviados': campanha['total_enviados']
     }
-
-
-def enviar_whatsapp_evolution(numero, mensagem, botoes=None, instance_name=None):
-    """
-    Envia mensagem via Evolution API
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
-    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
-    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01')
-    
-    url = f"{api_url}/message/sendText/{instance}"
-    
-    headers = {
-        'Content-Type': 'application/json',
-        'apikey': api_key
-    }
-    
-    payload = {
-        'number': numero,
-        'text': mensagem
-    }
-    
-    if botoes:
-        payload['buttons'] = [
-            {'id': b['id'], 'text': b['text']} for b in botoes
-        ]
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        
-        if response.status_code == 200:
-            logger.info(f"Mensagem enviada para {numero}")
-            return {'status': 'enviado', 'response': response.json()}
-        else:
-            logger.error(f"Erro ao enviar para {numero}: {response.text}")
-            return {'status': 'erro', 'message': response.text}
-            
-    except requests.exceptions.Timeout:
-        logger.error(f"Timeout ao enviar para {numero}")
-        return {'status': 'timeout', 'message': 'Tempo limite excedido'}
-    except Exception as e:
-        logger.error(f"Erro ao enviar mensagem: {str(e)}")
-        return {'status': 'erro', 'message': str(e)}
-
-
-def checar_instancia_evolution(instance_name=None):
-    """
-    Verifica status da instância WhatsApp
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
-    api_key = os.getenv('EVOLUTION_API_KEY', 'CONSIGNADO123')
-    instance = instance_name or os.getenv('EVOLUTION_INSTANCE_NAME', 'ParisCred_01')
-    
-    url = f"{api_url}/instance/connectionState/{instance}"
-    
-    headers = {'apikey': api_key}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            state = data.get('instance', {}).get('state', 'unknown')
-            return {
-                'status': 'ok',
-                'instance': instance,
-                'state': state,
-                'conectado': state == 'open'
-            }
-        else:
-            # Tentar listar instâncias
-            list_url = f"{api_url}/instance/fetchInstances"
-            list_resp = requests.get(list_url, headers=headers, timeout=10)
-            if list_resp.status_code == 200:
-                insts = list_resp.json()
-                for i in insts:
-                    if i.get('name') == instance:
-                        return {
-                            'status': 'ok',
-                            'instance': instance,
-                            'state': i.get('connectionStatus', 'unknown'),
-                            'conectado': i.get('connectionStatus') == 'open'
-                        }
-            return {'status': 'erro', 'message': f'Status: {response.status_code}'}
-            
-    except Exception as e:
-        logger.error(f"Erro ao verificar instância: {str(e)}")
-        return {'status': 'erro', 'message': str(e)}
 
 
 # ============================================================
@@ -783,153 +683,6 @@ def api_campanha_detalhes(camp_id):
 
 
 # ============================================================
-# ROTAS DE DISPARO (COM EVOLUTION API)
-# ============================================================
-
-@app.route('/api/campanhas/<int:camp_id>/disparar', methods=['POST'])
-@requer_login
-def Disparar_campanha(camp_id):
-    """Inicia o disparo de uma campanha em segundo plano"""
-    usuario = obter_usuario_atual()
-    
-    campanha = CampanhasDB.obter(camp_id)
-    if not campanha:
-        return jsonify({'erro': 'Campanha não encontrada'}), 404
-    
-    # Verificar permissão
-    if usuario['role'] != 'admin' and campanha['criador'] != session['usuario']:
-        logger.warning(f"Acesso negado: {session['usuario']} tentou disparar campanha {camp_id}")
-        return jsonify({'erro': 'Acesso negado'}), 403
-    
-    if not campanha['beneficiarios_json']:
-        return jsonify({'erro': 'Nenhum beneficiário configurado'}), 400
-    
-    # Se já estiver disparando
-    if camp_id in DISPAROS_ATIVOS and DISPAROS_ATIVOS[camp_id]['status'] == 'processando':
-        return jsonify({'erro': 'Esta campanha já está em processamento'}), 400
-    
-    # Iniciar thread de disparo
-    thread = threading.Thread(target=processar_disparo_background, args=(camp_id, session['usuario']))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'sucesso': True,
-        'mensagem': 'Disparo iniciado em segundo plano.',
-        'camp_id': camp_id
-    })
-
-def processar_disparo_background(camp_id, usuario_email):
-    """Função executada em segundo plano para enviar as mensagens"""
-    campanha = CampanhasDB.obter(camp_id)
-    if not campanha: return
-
-    total = len(campanha['beneficiarios_json'])
-    DISPAROS_ATIVOS[camp_id] = {
-        'status': 'processando',
-        'total': total,
-        'enviados': 0,
-        'erros': 0,
-        'inicio': datetime.now().isoformat()
-    }
-    
-    resultados = []
-    delay = int(os.getenv('MESSAGE_DELAY', '5'))
-    instancia_nome = campanha['instancias_json'][0] if campanha['instancias_json'] else None
-    
-    try:
-        for idx, beneficiario in enumerate(campanha['beneficiarios_json']):
-            # Se campanha foi cancelada ou algo assim (futuro)
-            if camp_id not in DISPAROS_ATIVOS: break
-                
-            numero = beneficiario.get('numero', '')
-            nome = beneficiario.get('nome', 'N/A')
-            
-            if not numero:
-                DISPAROS_ATIVOS[camp_id]['erros'] += 1
-                continue
-            
-            # Delay entre envios (exceto o primeiro)
-            if idx > 0:
-                time.sleep(delay)
-            
-            # Simular digitação (Anti-Ban 2.0)
-            try:
-                from modulo_antiban import anti_ban
-                anti_ban.simular_digitacao(instancia_nome, numero)
-            except Exception:
-                pass
-            
-            # Enviar via Evolution API
-            resultado = enviar_whatsapp_evolution(
-                numero=numero,
-                mensagem=campanha['mensagem'],
-                botoes=campanha['botoes_json'],
-                instance_name=instancia_nome
-            )
-            
-            if resultado['status'] == 'enviado':
-                DISPAROS_ATIVOS[camp_id]['enviados'] += 1
-            else:
-                DISPAROS_ATIVOS[camp_id]['erros'] += 1
-                
-            resultados.append({
-                'beneficiario': nome,
-                'numero': numero,
-                'status': resultado['status'],
-                'timestamp': datetime.now().isoformat()
-            })
-        
-        # Finalizar
-        CampanhasDB.atualizar(
-            camp_id,
-            status='disparado',
-            disparado_em=datetime.now().isoformat(),
-            total_enviados=DISPAROS_ATIVOS[camp_id]['enviados']
-        )
-        
-        HistoricoDB.registrar(
-            campanha_id=camp_id,
-            usuario=usuario_email,
-            total_beneficiarios=len(resultados),
-            resultados={'enviados': resultados}
-        )
-        
-        DISPAROS_ATIVOS[camp_id]['status'] = 'concluido'
-        DISPAROS_ATIVOS[camp_id]['fim'] = datetime.now().isoformat()
-        logger.info(f"Campanha {camp_id} finalizada em background")
-        
-    except Exception as e:
-        logger.error(f"Erro no disparo background {camp_id}: {str(e)}")
-        if camp_id in DISPAROS_ATIVOS:
-            DISPAROS_ATIVOS[camp_id]['status'] = 'erro'
-            DISPAROS_ATIVOS[camp_id]['erro_msg'] = str(e)
-
-@app.route('/api/campanhas/progresso')
-@requer_login
-def api_campanhas_progresso():
-    """Retorna o progresso de todos os disparos ativos"""
-    return jsonify(DISPAROS_ATIVOS)
-
-
-@app.route('/whatsapp')
-@requer_login
-def whatsapp():
-    """Página de administração do WhatsApp"""
-    usuario = obter_usuario_atual()
-    return render_template('whatsapp_admin.html', usuario=usuario_para_json(usuario))
-
-
-@app.route('/api/whatsapp/status')
-@requer_login
-def whatsapp_status():
-    """Verifica status da instância WhatsApp"""
-    instancia = request.args.get('instance', os.getenv('EVOLUTION_INSTANCE_NAME', 'Paris_01'))
-    status = checar_instancia_evolution(instancia)
-    return jsonify(status)
-
-
-# ============================================================
 # ROTAS ADMINISTRATIVAS
 # ============================================================
 
@@ -1074,8 +827,6 @@ def health():
     usuarios = UsuariosDB.listar_todos()
     campanhas = CampanhasDB.listar_todas()
     
-    evolution_status = checar_instancia_evolution()
-    
     db = Database()
     db_type = 'PostgreSQL' if db.is_postgres else 'SQLite'
     
@@ -1088,7 +839,7 @@ def health():
             'campanhas': len(campanhas),
             'tipo': db_type
         },
-        'whatsapp': evolution_status
+        'whatsapp': {"status": "wa.me", "tipo": "link_direto"}
     })
 
 
