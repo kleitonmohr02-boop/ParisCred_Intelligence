@@ -348,6 +348,138 @@ def atendimento():
     return render_template('atendimento_vendedor.html', usuario=usuario_para_json(usuario))
 
 
+@app.route('/api/leads/pendentes', methods=['GET'])
+@requer_login
+def api_leads_pendentes():
+    """Retorna leads pendentes de atendimento"""
+    try:
+        db = Database()
+        p = db.placeholder()
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT id, nome, phone, email, status, margem_consignavel, 
+                       data_criacao, observacoes, ultima_interacao
+                FROM clientes 
+                WHERE ativo = {db.bool_def(True)}
+                AND status IN ('Novo Lead', 'Pendente')
+                ORDER BY data_criacao DESC
+            """)
+            
+            leads = []
+            for row in cursor.fetchall():
+                lead = dict(row) if hasattr(row, 'keys') else None
+                if lead:
+                    leads.append({
+                        'id': lead.get('id'),
+                        'nome': lead.get('nome'),
+                        'numero': lead.get('phone', ''),
+                        'phone': lead.get('phone', ''),
+                        'email': lead.get('email', ''),
+                        'status': 'pendente' if lead.get('status') == 'Pendente' else 'pendente',
+                        'qualificacao': 'alta',
+                        'mensagem': lead.get('observacoes', 'Novo lead'),
+                        'timestamp': str(lead.get('data_criacao', ''))
+                    })
+        
+        return jsonify(leads)
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar leads pendentes: {str(e)}")
+        return jsonify([])
+
+
+@app.route('/api/leads/<int:lead_id>/conversa', methods=['GET'])
+@requer_login
+def api_leads_conversa(lead_id):
+    """Retorna conversa do lead"""
+    try:
+        db = Database()
+        p = db.placeholder()
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT * FROM clientes WHERE id = {p}", (lead_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return jsonify({'erro': 'Lead não encontrado'}), 404
+            
+            lead = dict(row) if hasattr(row, 'keys') else None
+            obs = lead.get('observacoes', '') if lead else ''
+            
+            conversa = []
+            if obs:
+                conversa.append({
+                    'mensagem': obs,
+                    'direção': 'entrada',
+                    'timestamp': str(lead.get('data_criacao', '')) if lead else ''
+                })
+            
+            return jsonify({'conversa': conversa})
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar conversa: {str(e)}")
+        return jsonify({'conversa': []})
+
+
+@app.route('/api/leads/<int:lead_id>/responder', methods=['POST'])
+@requer_login
+def api_leads_responder(lead_id):
+    """Responde mensagem do lead"""
+    try:
+        data = request.get_json()
+        mensagem = data.get('mensagem', '')
+        
+        if not mensagem:
+            return jsonify({'erro': 'Mensagem vazia'}), 400
+        
+        db = Database()
+        p = db.placeholder()
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT observacoes FROM clientes WHERE id = {p}", (lead_id,))
+            row = cursor.fetchone()
+            
+            obs_atual = ''
+            if row:
+                lead = dict(row) if hasattr(row, 'keys') else None
+                obs_atual = lead.get('observacoes', '') if lead else ''
+            
+            nova_obs = f"{obs_atual}\n[Resposta]: {mensagem}" if obs_atual else f"[Resposta]: {mensagem}"
+            
+            cursor.execute(f"UPDATE clientes SET observacoes = {p} WHERE id = {p}", (nova_obs, lead_id))
+            conn.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Erro ao responder: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/leads/<int:lead_id>/atender', methods=['POST'])
+@requer_login
+def api_leads_atender(lead_id):
+    """Marca lead como atendido"""
+    try:
+        db = Database()
+        p = db.placeholder()
+        
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"UPDATE clientes SET status = {p} WHERE id = {p}", ('Em Negociação', lead_id))
+            conn.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Erro ao atender: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
+
+
 @app.route('/crm')
 @requer_login
 def crm():
