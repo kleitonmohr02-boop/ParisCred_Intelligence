@@ -3,7 +3,6 @@ Skill: CRM Management
 Gestão de clientes, leads, relacionamentos
 """
 
-import sqlite3
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from database import Database
@@ -102,7 +101,7 @@ class ClientesDB:
                     "margem_consignavel": margem
                 }
         
-        except sqlite3.IntegrityError as e:
+        except Exception as e:
             return {"erro": f"Erro ao criar cliente: {str(e)}"}
     
     @staticmethod

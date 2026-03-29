@@ -396,6 +396,15 @@ def api_usuario():
 def api_stats():
     """Retorna estatísticas do usuário/sistema"""
     usuario = obter_usuario_atual()
+    db = Database()
+    ativo_val = db.bool_def(True)
+    
+    # Contar clientes
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT COUNT(*) as total FROM clientes WHERE ativo = {ativo_val}")
+        row = cursor.fetchone()
+        total_clientes = row['total'] if isinstance(row, dict) else row[0]
     
     if usuario['role'] == 'admin':
         usuarios = UsuariosDB.listar_todos()
@@ -406,14 +415,16 @@ def api_stats():
             'total_campanhas': len(campanhas),
             'total_disparos': sum(c['total_enviados'] for c in campanhas),
             'usuarios_ativos': len(usuarios),
-            'campanhas_ativas': sum(1 for c in campanhas if c['status'] == 'disparado')
+            'campanhas_ativas': sum(1 for c in campanhas if c['status'] == 'disparado'),
+            'total_clientes': total_clientes
         })
     else:
         campanhas_users = CampanhasDB.listar_por_criador(session['usuario'])
         return jsonify({
             'total_campanhas': len(campanhas_users),
             'total_disparos': sum(c['total_enviados'] for c in campanhas_users),
-            'campanhas_ativas': sum(1 for c in campanhas_users if c['status'] == 'disparado')
+            'campanhas_ativas': sum(1 for c in campanhas_users if c['status'] == 'disparado'),
+            'total_clientes': total_clientes
         })
 
 
@@ -427,6 +438,14 @@ def campanhas():
     """Página de gerenciamento de campanhas"""
     usuario = obter_usuario_atual()
     return render_template('campanhas.html', usuario=usuario_para_json(usuario))
+
+
+@app.route('/atendimento')
+@requer_login
+def atendimento():
+    """Página de atendimento ao vendedor"""
+    usuario = obter_usuario_atual()
+    return render_template('atendimento_vendedor.html', usuario=usuario_para_json(usuario))
 
 
 @app.route('/crm')
