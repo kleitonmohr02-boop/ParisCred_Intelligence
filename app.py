@@ -1,7 +1,7 @@
 """
 ParisCred Intelligence - Sistema SaaS com SQLite
 Aplicação Full-Stack com Autenticação, Painel ADM e Gerenciamento
-Versão 2.0 - Com segurança, validação e Evolution API integrada
+Versão 2.1 - Com segurança, validação e WhatsApp via links diretos (wa.me)
 """
 
 import os
@@ -969,12 +969,12 @@ def rate_limit_handler(e):
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print(" PARISCRED INTELLIGENCE v2.0 - SEGURO")
+    print(" PARISCRED INTELLIGENCE v2.1 - SEGURO")
     print("="*70)
     print(f"\n Servidor iniciando na porta 5000...")
     print(f" Acessar em: http://localhost:5000")
     print(f" Banco de dados: {os.getenv('DATABASE_PATH', 'app.db')}")
-    print(f" Evolution API: {os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')}")
+    print(f" WhatsApp: Links diretos (wa.me)")
     print(f" Rate Limiting: ATIVADO")
     print(f" Logging: {LOG_LEVEL}")
     print(f"\n Contas de Teste:")
