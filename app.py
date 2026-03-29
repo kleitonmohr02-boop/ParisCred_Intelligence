@@ -376,8 +376,10 @@ def api_crm_update_status():
     if not novo_status:
         return jsonify({'erro': 'Status não fornecido'}), 400
     
-    if novo_status not in STATUS_KANBAN:
-        return jsonify({'erro': f'Status inválido. Valores permitidos: {STATUS_KANBAN}'}), 400
+    STATUS_KANBAN_VALIDOS = ['Novo Lead', 'Em Negociação', 'Pendente', 'Finalizado', 'ativo', 'lead', 'inativo', 'emprestimo']
+    
+    if novo_status not in STATUS_KANBAN_VALIDOS:
+        return jsonify({'erro': f'Status inválido. Valores permitidos: {STATUS_KANBAN_VALIDOS}'}), 400
     
     try:
         db = Database()
